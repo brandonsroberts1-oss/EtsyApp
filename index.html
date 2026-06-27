@@ -6,6 +6,11 @@
   <title>Royal Caribbean Cruise Route Mapper</title>
   <script src="https://d3js.org/d3.v7.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
+  <!-- Nautical-but-legible type: Cinzel (engraved maritime capitals) for titles,
+       Spectral (a refined, readable serif) for labels, dates and body text. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Spectral:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
   <style>
     :root {
       --navy: #0a1628;
@@ -231,74 +236,9 @@
     .placeholder-msg .icon { font-size: 3rem; margin-bottom: 10px; opacity: 0.5; }
     .placeholder-msg p { font-size: 0.85rem; line-height: 1.7; }
 
-    /* ── SVG map internals ───────────────────────────────────── */
-    /* vector-effect keeps coastlines/grid a constant on-screen width as the
-       geography layer is scaled up on zoom, so they stay crisp (not blocky). */
-    .ocean-bg  { fill: #061220; }
-    .land      { fill: #233c2d; stroke: #2e5c3a; stroke-width: 0.6; vector-effect: non-scaling-stroke; }
-    .borders   { fill: none; stroke: #3a5e45; stroke-width: 0.5; vector-effect: non-scaling-stroke; }
-    .graticule { fill: none; stroke: rgba(255,255,255,0.04); stroke-width: 0.5; vector-effect: non-scaling-stroke; }
-
-    .route-line-shadow {
-      fill: none;
-      stroke: rgba(0,0,0,0.5);
-      stroke-width: 4.5;
-      stroke-dasharray: 9 7;
-      stroke-linecap: round;
-    }
-    .route-line {
-      fill: none;
-      stroke: #d4ae50;
-      stroke-width: 2.5;
-      stroke-dasharray: 9 7;
-      stroke-linecap: round;
-    }
-    .port-ring {
-      fill: none;
-      stroke: #e8c96b;
-      stroke-width: 1.2;
-      stroke-dasharray: 3 2;
-      opacity: 0.6;
-    }
-    .port-circle {
-      fill: #c8a84b;
-      stroke: #e8d080;
-      stroke-width: 1.5;
-    }
-    .port-circle-home {
-      fill: #e8c96b;
-      stroke: #ffffff;
-      stroke-width: 1.8;
-    }
-    .port-circle-scenic {
-      fill: #4a90d9;
-      stroke: #80c0ff;
-      stroke-width: 1.5;
-    }
-    .port-label-bg { fill: rgba(5,14,24,0.82); rx: 2; }
-    .port-label {
-      font-family: Arial, sans-serif;
-      font-size: 10.5px;
-      fill: #eee;
-      text-anchor: middle;
-      pointer-events: none;
-    }
-    .port-label-home { fill: #e8c96b; font-weight: bold; font-size: 11px; }
-    .port-label-scenic { fill: #80c0ff; font-size: 10px; }
-    .map-title {
-      font-family: Georgia, serif;
-      font-size: 15px;
-      fill: #e8c96b;
-      text-anchor: middle;
-    }
-    .map-subtitle {
-      font-family: Arial, sans-serif;
-      font-size: 10.5px;
-      fill: #8a9bb0;
-      text-anchor: middle;
-    }
-    .legend { font-family: Arial, sans-serif; font-size: 10px; fill: #8a9bb0; }
-    .legend-title { fill: #c8a84b; font-size: 10.5px; }
+    /* SVG map styling lives in the JS constant MAP_CSS (single source of truth),
+       injected both into this page and into every exported SVG so the render and
+       the export always match. */
   </style>
 </head>
 <body>
@@ -383,6 +323,18 @@
 
     <div>
       <button class="btn btn-primary" id="generate-btn">&#9654; Generate Route Map</button>
+    </div>
+
+    <div>
+      <div class="section-title">Export</div>
+      <div class="form-group">
+        <label for="export-format">Frame &amp; Size</label>
+        <select id="export-format">
+          <option value="wide">Current View (wide)</option>
+          <option value="square">3.5&Prime; &times; 3.5&Prime; Square</option>
+          <option value="circle">3.8&Prime; Porthole (circle)</option>
+        </select>
+      </div>
       <button class="btn btn-secondary" id="export-btn" disabled>&#8595; Export as SVG</button>
     </div>
 
@@ -721,7 +673,6 @@ const REGION_BOUNDS = {
 let worldData = null;
 let zoomBehavior = null;
 let zoomTarget = null;
-let currentKey = null;
 
 // ─── UI refs ──────────────────────────────────────────────────────────────────
 const itinSelect   = document.getElementById('itin-select');
@@ -729,17 +680,49 @@ const dateStart    = document.getElementById('date-start');
 const dateEnd      = document.getElementById('date-end');
 const generateBtn  = document.getElementById('generate-btn');
 const exportBtn    = document.getElementById('export-btn');
+const exportFormat = document.getElementById('export-format');
 const previewEl    = document.getElementById('itin-preview');
 const placeholder  = document.getElementById('placeholder');
 const svgEl        = document.getElementById('cruise-map');
 const zoomControls = document.getElementById('zoom-controls');
 const zoomHint     = document.getElementById('zoom-hint');
 
+// ─── Nautical SVG styling (single source of truth for screen AND export) ──────
+const FONT_IMPORT = "@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Spectral:ital,wght@0,400;0,500;0,600;1,400&display=swap');\n";
+const MAP_CSS = `
+.chart-bg { fill:#06141f; }
+.water { fill:#0b2436; }
+.land { fill:#27412f; stroke:#3a6048; stroke-width:0.6; vector-effect:non-scaling-stroke; }
+.borders { fill:none; stroke:#3a6048; stroke-width:0.5; vector-effect:non-scaling-stroke; }
+.graticule { fill:none; stroke:rgba(150,190,170,0.07); stroke-width:0.5; vector-effect:non-scaling-stroke; }
+.route-shadow { fill:none; stroke:rgba(0,0,0,0.45); stroke-linecap:round; }
+.route { fill:none; stroke:#e8c96b; stroke-linecap:round; }
+.port-ring { fill:none; stroke:#e8c96b; stroke-dasharray:3 2; opacity:0.65; }
+.port-dot { fill:#d8b85a; stroke:#f0d68a; }
+.port-dot-home { fill:#f0d27a; stroke:#ffffff; }
+.port-dot-scenic { fill:#5aa0e0; stroke:#a8d4ff; }
+.lbl { font-family:'Spectral',Georgia,serif; fill:#ede6d2; text-anchor:middle; paint-order:stroke; stroke:#06141f; stroke-width:2.4px; stroke-linejoin:round; }
+.lbl-home { fill:#f0d27a; font-weight:600; }
+.lbl-scenic { fill:#a8d4ff; }
+.ship-name { font-family:'Cinzel',serif; fill:#f0d27a; text-anchor:middle; letter-spacing:0.06em; paint-order:stroke; stroke:#06141f; stroke-width:3px; stroke-linejoin:round; }
+.banner-title { font-family:'Cinzel',serif; fill:#f3ead0; text-anchor:middle; letter-spacing:0.03em; }
+.banner-dates { font-family:'Spectral',Georgia,serif; fill:#d6c290; text-anchor:middle; font-style:italic; }
+.compass-letter { font-family:'Cinzel',serif; fill:#e8c96b; text-anchor:middle; }
+.legend-txt { font-family:'Spectral',Georgia,serif; fill:#cdbf9e; }
+.legend-title { font-family:'Cinzel',serif; fill:#e8c96b; letter-spacing:0.08em; }
+.watermark { font-family:'Spectral',Georgia,serif; fill:rgba(200,168,75,0.45); }
+`;
+// Inject the map styles into the page so the on-screen render matches exports.
+(function injectScreenCss(){
+  const s = document.createElement('style');
+  s.textContent = MAP_CSS;
+  document.head.appendChild(s);
+})();
+
 // ─── Pre-load world data ──────────────────────────────────────────────────────
 async function loadWorld() {
   // 50m resolution gives far more coastline detail (and reveals small Caribbean
-  // islands) than 110m, so zooming in actually shows more detail. Fall back to
-  // 110m if the larger file fails to load.
+  // islands) than 110m. Fall back to 110m if the larger file fails to load.
   const sources = [
     'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-50m.json',
     'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json',
@@ -756,14 +739,11 @@ loadWorld();
 // ─── Itinerary select handler ─────────────────────────────────────────────────
 itinSelect.addEventListener('change', () => {
   const key = itinSelect.value;
-  currentKey = key || null;
   if (!key) {
     previewEl.innerHTML = '<p style="color:var(--gray);font-size:0.78rem;font-family:Arial,sans-serif;">Select an itinerary to preview ports of call.</p>';
     return;
   }
   const itin = ITINERARIES[key];
-
-  // Auto-fill dates
   if (!dateStart.value) {
     const d = new Date(); d.setDate(d.getDate() + 30);
     dateStart.value = d.toISOString().split('T')[0];
@@ -773,15 +753,13 @@ itinSelect.addEventListener('change', () => {
     d.setDate(d.getDate() + itin.nights);
     dateEnd.value = d.toISOString().split('T')[0];
   }
-
-  // Render preview
-  const visibleWaypoints = itin.waypoints.filter(w => w.type !== 'sea');
+  const visible = itin.waypoints.filter(w => w.type !== 'sea');
   previewEl.innerHTML = `
     <div class="itin-meta">
       <span>${itin.ship}</span> &bull; ${itin.nights} nights &bull; from ${itin.homePort}
     </div>
     <ul class="port-list">
-      ${visibleWaypoints.map(w => `
+      ${visible.map(w => `
         <li>
           <span class="pday">Day ${w.day}</span>
           <div class="pdot pdot-${w.type === 'home' ? 'home' : w.type === 'scenic' ? 'scenic' : 'port'}"></div>
@@ -792,7 +770,7 @@ itinSelect.addEventListener('change', () => {
   `;
 });
 
-// ─── Date sync ───────────────────────────────────────────────────────────────
+// ─── Date sync ─────────────────────────────────────────────────────────────────
 dateStart.addEventListener('change', () => {
   const key = itinSelect.value;
   if (!key || !dateStart.value) return;
@@ -802,17 +780,14 @@ dateStart.addEventListener('change', () => {
   dateEnd.value = d.toISOString().split('T')[0];
 });
 
-// ─── Generate map ─────────────────────────────────────────────────────────────
+// ─── Generate (on-screen, interactive) ──────────────────────────────────────────
 generateBtn.addEventListener('click', async () => {
   const key = itinSelect.value;
   if (!key) { alert('Please select an itinerary.'); return; }
-  if (!worldData) {
-    generateBtn.textContent = 'Loading…';
-    await loadWorld();
-  }
+  if (!worldData) { generateBtn.textContent = 'Loading…'; await loadWorld(); }
   generateBtn.textContent = '⏳ Rendering…';
   await new Promise(r => setTimeout(r, 10));
-  renderMap(ITINERARIES[key], dateStart.value, dateEnd.value);
+  renderScreen(ITINERARIES[key], dateStart.value, dateEnd.value);
   generateBtn.textContent = '▶ Generate Route Map';
   exportBtn.disabled = false;
   placeholder.style.display = 'none';
@@ -820,256 +795,349 @@ generateBtn.addEventListener('click', async () => {
   zoomHint.style.display = 'block';
 });
 
-// ─── Render ───────────────────────────────────────────────────────────────────
-function renderMap(itin, startDate, endDate) {
-  const container = svgEl.parentElement;
-  const W = container.clientWidth;
-  const H = container.clientHeight;
+// ════════════════════════════════════════════════════════════════════════════
+//  NAUTICAL DRAWING HELPERS
+// ════════════════════════════════════════════════════════════════════════════
 
-  const svg = d3.select('#cruise-map')
-    .attr('width', W)
-    .attr('height', H)
-    .attr('viewBox', `0 0 ${W} ${H}`)
-    .attr('xmlns', 'http://www.w3.org/2000/svg');
-
-  svg.selectAll('*').remove();
-
-  // ── Layout ──────────────────────────────────────────────────
-  const padT = 52, padB = 52, padL = 16, padR = 16;
-  const mapW = W - padL - padR;
-  const mapH = H - padT - padB;
-
-  // ── Defs: glow filter + clip path ───────────────────────────
-  const defs = svg.append('defs');
-  const glow = defs.append('filter').attr('id', 'glow').attr('x', '-30%').attr('y', '-30%').attr('width', '160%').attr('height', '160%');
-  glow.append('feGaussianBlur').attr('stdDeviation', '2').attr('result', 'blur');
-  const feMerge = glow.append('feMerge');
-  feMerge.append('feMergeNode').attr('in', 'blur');
-  feMerge.append('feMergeNode').attr('in', 'SourceGraphic');
-  // Clip geography + route to the map frame so zoomed/panned content never
-  // spills over the title, legend or compass (and exports cleanly).
-  defs.append('clipPath').attr('id', 'mapClip')
-    .append('rect').attr('x', 0).attr('y', 0).attr('width', mapW).attr('height', mapH).attr('rx', 4);
-
-  // Full-frame background (guarantees a filled backdrop in the exported SVG)
-  svg.append('rect').attr('width', W).attr('height', H).attr('class', 'svg-bg').attr('fill', '#061220');
-
-  // ── Projection (fit region to the frame) ────────────────────
-  const allWpts = itin.waypoints;
-  const visiblePorts = allWpts.filter(w => w.type !== 'sea');
-  const lons = allWpts.map(w => w.lon);
-  const lats = allWpts.map(w => w.lat);
-  let lon0 = Math.min(...lons), lon1 = Math.max(...lons);
-  let lat0 = Math.min(...lats), lat1 = Math.max(...lats);
-  const lonSpan = lon1 - lon0 || 10;
-  const latSpan = lat1 - lat0 || 8;
-  lon0 -= lonSpan * 0.28; lon1 += lonSpan * 0.28;
-  lat0 -= latSpan * 0.28; lat1 += latSpan * 0.28;
-  const bounds = REGION_BOUNDS[itin.region];
-  if (bounds) {
-    lon0 = Math.min(lon0, bounds.lon0); lon1 = Math.max(lon1, bounds.lon1);
-    lat0 = Math.min(lat0, bounds.lat0); lat1 = Math.max(lat1, bounds.lat1);
+// Captain's / ship's wheel: hub, rim, 8 spokes ending in handle knobs.
+function drawShipsWheel(parent, cx, cy, r) {
+  const g = parent.append('g').attr('transform', `translate(${cx},${cy})`);
+  for (let i = 0; i < 8; i++) {
+    const a = i / 8 * 2 * Math.PI, dx = Math.cos(a), dy = Math.sin(a);
+    g.append('line').attr('x1', dx*r*0.18).attr('y1', dy*r*0.18)
+      .attr('x2', dx*r*1.30).attr('y2', dy*r*1.30)
+      .attr('stroke', '#c8a84b').attr('stroke-width', r*0.11).attr('stroke-linecap', 'round');
+    g.append('circle').attr('cx', dx*r*1.32).attr('cy', dy*r*1.32).attr('r', r*0.12)
+      .attr('fill', '#e8c96b').attr('stroke', '#6e5526').attr('stroke-width', 1);
   }
-  // Fit to the region by its corner POINTS (a MultiPoint), not a Polygon: a
-  // spherical polygon's ring winding can make d3 fit the whole globe instead of
-  // the small region (which would render the entire world map zoomed out).
-  const fitGeoJSON = { type: 'MultiPoint', coordinates: [[lon0,lat0],[lon1,lat0],[lon1,lat1],[lon0,lat1]] };
-  const projection = d3.geoMercator().fitSize([mapW, mapH], fitGeoJSON);
-  const path = d3.geoPath().projection(projection);
+  g.append('circle').attr('r', r).attr('fill', 'none').attr('stroke', '#c8a84b').attr('stroke-width', r*0.16);
+  g.append('circle').attr('r', r*0.84).attr('fill', 'none').attr('stroke', '#6e5526').attr('stroke-width', r*0.04);
+  g.append('circle').attr('r', r*0.24).attr('fill', '#e8c96b').attr('stroke', '#6e5526').attr('stroke-width', 1.5);
+  g.append('circle').attr('r', r*0.10).attr('fill', '#6e5526');
+  return g;
+}
 
-  // ── Layer structure ─────────────────────────────────────────
-  //  mapRoot (translate by pad)   ← zoom behaviour is attached here
-  //    ocean-bg               (static frame backdrop)
-  //    clipWrap               (clipped to the map frame)
-  //      gGeo                 (gets the zoom transform → geography scales)
-  //      overlay              (route + markers; kept at constant on-screen size)
-  //    chrome                 (static compass + legend, never scaled)
-  const mapRoot = svg.append('g').attr('class', 'map-root').attr('transform', `translate(${padL},${padT})`);
-  mapRoot.append('rect').attr('class', 'ocean-bg').attr('width', mapW).attr('height', mapH).attr('rx', 4);
-
-  const clipWrap = mapRoot.append('g').attr('clip-path', 'url(#mapClip)');
-  const gGeo = clipWrap.append('g').attr('class', 'geo');
-  const overlay = clipWrap.append('g').attr('class', 'overlay');
-
-  // Geography (scales with zoom; strokes stay constant via non-scaling-stroke)
-  const graticule = d3.geoGraticule().step([10, 10]);
-  gGeo.append('path').datum(graticule()).attr('class', 'graticule').attr('d', path);
-  gGeo.append('path').datum(topojson.feature(worldData, worldData.objects.countries)).attr('class', 'land').attr('d', path);
-  gGeo.append('path').datum(topojson.mesh(worldData, worldData.objects.countries, (a,b) => a !== b)).attr('class', 'borders').attr('d', path);
-
-  // ── Route (lives in the overlay so its width / dash / glow stay constant
-  //    regardless of zoom; only its geometry is recomputed per zoom) ──────────
-  const lineGen = d3.line().x(d => d[0]).y(d => d[1]).curve(d3.curveCatmullRom.alpha(0.5));
-  const routeShadow = overlay.append('path').attr('class', 'route-line-shadow');
-  const routeLine   = overlay.append('path').attr('class', 'route-line').attr('filter', 'url(#glow)');
-
-  function positionRoute(t) {
-    const pts = allWpts.map(w => t.apply(projection([w.lon, w.lat])));
-    const d = lineGen(pts);
-    routeShadow.attr('d', d);
-    routeLine.attr('d', d);
+// Nautical compass rose: ticked ring + faceted 8-point star + cardinal letters.
+function drawCompassRose(parent, cx, cy, r, lf) {
+  const g = parent.append('g').attr('transform', `translate(${cx},${cy})`);
+  const D = a => [Math.sin(a), -Math.cos(a)];
+  g.append('circle').attr('r', r).attr('fill', 'rgba(6,18,28,0.82)').attr('stroke', '#b98d3e').attr('stroke-width', 1.3);
+  g.append('circle').attr('r', r*0.9).attr('fill', 'none').attr('stroke', '#6e5526').attr('stroke-width', 0.6);
+  for (let i = 0; i < 72; i++) {
+    const a = i*Math.PI/36, o = (i%9===0) ? r*0.74 : r*0.84, e = r*0.9, s = D(a);
+    g.append('line').attr('x1', s[0]*o).attr('y1', s[1]*o).attr('x2', s[0]*e).attr('y2', s[1]*e)
+      .attr('stroke', '#8a6d2a').attr('stroke-width', 0.5);
   }
-
-  // ── Port markers (constant on-screen size; only the group moves on zoom) ──
-  const seen = new Set();
-  const deduped = visiblePorts.filter(w => { if (seen.has(w.name)) return false; seen.add(w.name); return true; });
-
-  const markerSel = overlay.selectAll('g.marker').data(deduped).enter().append('g').attr('class', 'marker');
-  markerSel.each(function (w) {
-    const sel = d3.select(this);
-    const isHome = w.type === 'home', isScenic = w.type === 'scenic';
-    const r = isHome ? 6 : isScenic ? 5 : 4.5;
-    if (isHome) sel.append('circle').attr('class', 'port-ring').attr('r', 10);
-    sel.append('circle')
-      .attr('class', isScenic ? 'port-circle-scenic' : isHome ? 'port-circle-home' : 'port-circle')
-      .attr('r', r);
-    const lblW = Math.min(w.name.length * 5.8 + 8, 220);
-    const y0 = projection([w.lon, w.lat])[1];
-    const offY = (y0 < mapH * 0.18) ? 19 : -13;   // drop the label below if near the top edge
-    sel.append('rect').attr('class', 'port-label-bg')
-      .attr('x', -lblW/2).attr('y', offY - 10).attr('width', lblW).attr('height', 13).attr('rx', 2);
-    sel.append('text')
-      .attr('class', `port-label${isHome ? ' port-label-home' : isScenic ? ' port-label-scenic' : ''}`)
-      .attr('x', 0).attr('y', offY).text(w.name);
+  const long = r*0.70, short = r*0.40, base = r*0.13;
+  for (let i = 0; i < 8; i++) {
+    const a = i*Math.PI/4, len = (i%2===0) ? long : short, north = (i===0);
+    const T = D(a).map(v => v*len), Lb = D(a+Math.PI/2).map(v => v*base), Rb = D(a-Math.PI/2).map(v => v*base);
+    g.append('polygon').attr('points', `0,0 ${Lb} ${T}`).attr('fill', north ? '#c14b39' : (i%2===0 ? '#e8c96b' : '#b98d3e'));
+    g.append('polygon').attr('points', `0,0 ${Rb} ${T}`).attr('fill', north ? '#8f3024' : (i%2===0 ? '#a8801f' : '#6e5526'));
+  }
+  g.append('circle').attr('r', r*0.10).attr('fill', '#e8c96b').attr('stroke', '#6e5526').attr('stroke-width', 1);
+  [['N',0],['E',Math.PI/2],['S',Math.PI],['W',3*Math.PI/2]].forEach(([l,a]) => {
+    const p = D(a).map(v => v*(r + lf*0.78));
+    g.append('text').attr('class', 'compass-letter').attr('x', p[0]).attr('y', p[1] + lf*0.35).attr('font-size', lf).text(l);
   });
+  return g;
+}
 
-  function positionMarkers(t) {
-    markerSel.attr('transform', w => { const p = t.apply(projection([w.lon, w.lat])); return `translate(${p[0]},${p[1]})`; });
-  }
+// Stylized brass plaque holding the itinerary name + dates.
+function drawBanner(parent, cx, top, w, itin, start, end, L) {
+  const h = L.bannerH, x = cx - w/2, g = parent.append('g');
+  g.append('rect').attr('x', x).attr('y', top).attr('width', w).attr('height', h).attr('rx', 5)
+    .attr('fill', 'rgba(8,22,33,0.88)').attr('stroke', '#b98d3e').attr('stroke-width', 1.6);
+  g.append('rect').attr('x', x+3).attr('y', top+3).attr('width', w-6).attr('height', h-6).attr('rx', 3)
+    .attr('fill', 'none').attr('stroke', '#6e5526').attr('stroke-width', 0.8);
+  [[x+7,top+7],[x+w-7,top+7],[x+7,top+h-7],[x+w-7,top+h-7]].forEach(p =>
+    g.append('circle').attr('cx', p[0]).attr('cy', p[1]).attr('r', 1.9).attr('fill', '#e8c96b'));
+  g.append('text').attr('class', 'banner-title').attr('x', cx).attr('y', top + h*0.43)
+    .attr('font-size', L.bannerTitleF).text(itin.name);
+  const dates = (start && end) ? `${formatDate(start)}  –  ${formatDate(end)}` : `${itin.nights} Nights`;
+  g.append('text').attr('class', 'banner-dates').attr('x', cx).attr('y', top + h*0.80)
+    .attr('font-size', L.bannerDateF).text(dates);
+}
 
-  // ── Zoom: geography scales for detail, annotations stay readable ──────────
-  zoomBehavior = d3.zoom()
-    .scaleExtent([1, 40])
-    .extent([[0, 0], [mapW, mapH]])
-    .on('zoom', (event) => {
-      const t = event.transform;
-      gGeo.attr('transform', t);   // scales land/coastlines → reveals detail
-      positionRoute(t);            // route follows, but keeps constant width
-      positionMarkers(t);          // markers + labels follow, but stay same size
-    });
-  zoomTarget = mapRoot;
-  mapRoot.call(zoomBehavior);
-
-  // ── Chrome: compass + legend (static, never scaled) ──────────
-  const chrome = mapRoot.append('g').attr('class', 'chrome');
-  drawCompass(chrome, mapW - 46, mapH - 46, 28);
-
-  const leg = chrome.append('g').attr('transform', `translate(8, ${mapH - 70})`);
-  leg.append('rect').attr('width', 160).attr('height', 66).attr('fill', 'rgba(5,14,24,0.85)').attr('rx', 3);
-  leg.append('text').attr('class', 'legend legend-title').attr('x', 8).attr('y', 15).text('LEGEND');
-  const legendItems = [
-    { label: 'Home Port',       color: '#e8c96b', dash: null,  r: 5  },
-    { label: 'Port of Call',    color: '#c8a84b', dash: null,  r: 4  },
-    { label: 'Scenic Cruising', color: '#4a90d9', dash: null,  r: 4  },
-    { label: 'Cruise Route',    color: '#d4ae50', dash: '7 5', r: null },
-  ];
-  legendItems.forEach((item, i) => {
-    const ly = 28 + i * 13;
-    if (item.dash) {
-      leg.append('line').attr('x1', 8).attr('y1', ly).attr('x2', 26).attr('y2', ly)
-        .attr('stroke', item.color).attr('stroke-width', 2).attr('stroke-dasharray', item.dash);
-    } else {
-      leg.append('circle').attr('cx', 17).attr('cy', ly - 1).attr('r', item.r).attr('fill', item.color);
+// Decorative frame: double rule + corner rivets (rect/square) or porthole (circle).
+function drawFrame(svg, L) {
+  const { shape, W, H } = L, g = svg.append('g');
+  if (shape === 'circle') {
+    g.append('circle').attr('cx', L.cx).attr('cy', L.cy).attr('r', L.R + L.ring*0.5).attr('fill', 'none').attr('stroke', '#b98d3e').attr('stroke-width', L.ring*0.5);
+    g.append('circle').attr('cx', L.cx).attr('cy', L.cy).attr('r', L.R + 1).attr('fill', 'none').attr('stroke', '#e8c96b').attr('stroke-width', 1.5);
+    g.append('circle').attr('cx', L.cx).attr('cy', L.cy).attr('r', L.R + L.ring*0.92).attr('fill', 'none').attr('stroke', '#6e5526').attr('stroke-width', 1);
+    for (let i = 0; i < 16; i++) {
+      const a = i/16*2*Math.PI, br = L.R + L.ring*0.5;
+      g.append('circle').attr('cx', L.cx + Math.cos(a)*br).attr('cy', L.cy + Math.sin(a)*br).attr('r', 2.6)
+        .attr('fill', '#2a2110').attr('stroke', '#e8c96b').attr('stroke-width', 0.8);
     }
-    leg.append('text').attr('class', 'legend').attr('x', 32).attr('y', ly + 3).text(item.label);
-  });
-
-  // ── Title / subtitle / watermark (static top-level) ──────────
-  svg.append('text').attr('class', 'map-title').attr('x', W/2).attr('y', 24)
-    .text(`${itin.name} — ${itin.ship}`);
-  if (startDate && endDate) {
-    svg.append('text').attr('class', 'map-subtitle').attr('x', W/2).attr('y', 38)
-      .text(`${formatDate(startDate)} – ${formatDate(endDate)}`);
+  } else {
+    const m = L.m;
+    g.append('rect').attr('x', m).attr('y', m).attr('width', W-2*m).attr('height', H-2*m).attr('rx', 7)
+      .attr('fill', 'none').attr('stroke', '#b98d3e').attr('stroke-width', shape === 'square' ? 3 : 2.5);
+    g.append('rect').attr('x', m+5).attr('y', m+5).attr('width', W-2*m-10).attr('height', H-2*m-10).attr('rx', 5)
+      .attr('fill', 'none').attr('stroke', '#6e5526').attr('stroke-width', 1);
+    [[m,m],[W-m,m],[m,H-m],[W-m,H-m]].forEach(p =>
+      g.append('circle').attr('cx', p[0]).attr('cy', p[1]).attr('r', 3.2).attr('fill', '#e8c96b').attr('stroke', '#6e5526').attr('stroke-width', 0.8));
   }
-  svg.append('text')
-    .attr('x', W - 8).attr('y', H - 8)
-    .attr('text-anchor', 'end')
-    .attr('font-family', 'Arial,sans-serif').attr('font-size', '8px')
-    .attr('fill', 'rgba(200,168,75,0.35)')
-    .text('Royal Caribbean Cruise Route Mapper');
-
-  // Prime the layers at the identity transform (also resets prior zoom state)
-  mapRoot.call(zoomBehavior.transform, d3.zoomIdentity);
 }
 
-// ─── Compass rose ─────────────────────────────────────────────────────────────
-function drawCompass(g, cx, cy, r) {
-  const c = g.append('g').attr('transform', `translate(${cx},${cy})`).attr('opacity', 0.75);
-  c.append('circle').attr('r', r).attr('fill', 'rgba(5,14,24,0.85)').attr('stroke', '#c8a84b').attr('stroke-width', 1);
-  c.append('polygon').attr('points', `0,${-r+5} 3.5,0 0,-2 -3.5,0`).attr('fill', '#e8c96b');
-  c.append('polygon').attr('points', `0,${r-5} 3.5,0 0,2 -3.5,0`).attr('fill', '#3a5a7a');
-  [['N',0,-r+2],['S',0,r+9],['E',r+8,3],['W',-r-8,3]].forEach(([l,dx,dy]) => {
-    c.append('text').attr('x',dx).attr('y',dy).attr('text-anchor','middle')
-      .attr('font-family','Arial').attr('font-size','7px')
-      .attr('fill', l==='N' ? '#e8c96b' : '#6a8aaa').attr('font-weight','bold').text(l);
+function drawLegend(svg, L) {
+  if (!L.showLegend) return;
+  const x = L.map.x + 10, y = L.map.y + L.map.h - 80;
+  const g = svg.append('g').attr('transform', `translate(${x},${y})`);
+  g.append('rect').attr('width', 152).attr('height', 72).attr('rx', 4).attr('fill', 'rgba(6,18,28,0.82)').attr('stroke', '#6e5526').attr('stroke-width', 0.8);
+  g.append('text').attr('class', 'legend-title').attr('x', 10).attr('y', 16).attr('font-size', 11).text('LEGEND');
+  const items = [['Home Port','#f0d27a','dot'],['Port of Call','#d8b85a','dot'],['Scenic Cruising','#5aa0e0','dot'],['Cruise Route','#e8c96b','line']];
+  items.forEach((it, i) => {
+    const ly = 31 + i*12.5;
+    if (it[2] === 'line') g.append('line').attr('x1', 8).attr('y1', ly).attr('x2', 26).attr('y2', ly).attr('stroke', it[1]).attr('stroke-width', 2).attr('stroke-dasharray', '6 4');
+    else g.append('circle').attr('cx', 17).attr('cy', ly-1).attr('r', 4).attr('fill', it[1]);
+    g.append('text').attr('class', 'legend-txt').attr('x', 32).attr('y', ly+3).attr('font-size', 9.5).text(it[0]);
   });
 }
 
-// ─── Zoom controls (operate on the same node the zoom behaviour is bound to) ──
-document.getElementById('zoom-in').addEventListener('click', () => {
-  if (zoomTarget) zoomTarget.transition().duration(280).call(zoomBehavior.scaleBy, 1.6);
-});
-document.getElementById('zoom-out').addEventListener('click', () => {
-  if (zoomTarget) zoomTarget.transition().duration(280).call(zoomBehavior.scaleBy, 0.625);
-});
-document.getElementById('zoom-reset').addEventListener('click', () => {
-  if (zoomTarget) zoomTarget.transition().duration(350).call(zoomBehavior.transform, d3.zoomIdentity);
-});
+// ════════════════════════════════════════════════════════════════════════════
+//  PROJECTION + GEOGRAPHY + ROUTE
+// ════════════════════════════════════════════════════════════════════════════
 
-// ─── SVG Export ──────────────────────────────────────────────────────────────
-// Exports exactly what is on screen, INCLUDING the current zoom/pan, because we
-// clone the live SVG without resetting the zoom transform. Styles are injected
-// as a single <style> element (never as a second style attribute, which is what
-// caused the previous "Attribute style redefined" parse error).
-exportBtn.addEventListener('click', () => {
-  const svgNode = document.getElementById('cruise-map');
+function dedupe(arr) {
+  const seen = new Set();
+  return arr.filter(w => { if (seen.has(w.name)) return false; seen.add(w.name); return true; });
+}
 
-  // Clone the current (zoomed/panned) SVG as-is — the zoom level is preserved.
-  const clone = svgNode.cloneNode(true);
+// Fit a Mercator projection to an area. fitMode 'region' adds geographic context;
+// 'route' fits tightly so the route fills the frame. Uses corner POINTS (a
+// MultiPoint) to avoid the spherical-polygon winding issue that fits the globe.
+function makeProjection(waypoints, area, fitMode, region) {
+  const lons = waypoints.map(w => w.lon), lats = waypoints.map(w => w.lat);
+  let lon0 = Math.min(...lons), lon1 = Math.max(...lons), lat0 = Math.min(...lats), lat1 = Math.max(...lats);
+  if (fitMode === 'region') {
+    const lonSpan = (lon1-lon0) || 10, latSpan = (lat1-lat0) || 8;
+    lon0 -= lonSpan*0.28; lon1 += lonSpan*0.28; lat0 -= latSpan*0.28; lat1 += latSpan*0.28;
+    const b = REGION_BOUNDS[region];
+    if (b) { lon0 = Math.min(lon0,b.lon0); lon1 = Math.max(lon1,b.lon1); lat0 = Math.min(lat0,b.lat0); lat1 = Math.max(lat1,b.lat1); }
+  } else {
+    const lonSpan = (lon1-lon0) || 6, latSpan = (lat1-lat0) || 5;
+    lon0 -= lonSpan*0.18; lon1 += lonSpan*0.18; lat0 -= latSpan*0.18; lat1 += latSpan*0.18;
+  }
+  const mp = { type: 'MultiPoint', coordinates: [[lon0,lat0],[lon1,lat0],[lon1,lat1],[lon0,lat1]] };
+  return d3.geoMercator().fitSize([area.w, area.h], mp);
+}
 
+function drawGeography(g, projection, path) {
+  g.append('path').datum(d3.geoGraticule().step([10,10])()).attr('class', 'graticule').attr('d', path);
+  g.append('path').datum(topojson.feature(worldData, worldData.objects.countries)).attr('class', 'land').attr('d', path);
+  g.append('path').datum(topojson.mesh(worldData, worldData.objects.countries, (a,b) => a !== b)).attr('class', 'borders').attr('d', path);
+}
+
+function buildRouteAndMarkers(overlay, projection, itin, L) {
+  const all = itin.waypoints;
+  const ports = dedupe(all.filter(w => w.type !== 'sea'));
+  const lineGen = d3.line().x(d => d[0]).y(d => d[1]).curve(d3.curveCatmullRom.alpha(0.5));
+  const dash = `${(L.routeW*3.4).toFixed(1)} ${(L.routeW*2.6).toFixed(1)}`;
+  const rShadow = overlay.append('path').attr('class', 'route-shadow').attr('stroke-width', L.routeW*1.8).attr('stroke-dasharray', dash);
+  const rLine = overlay.append('path').attr('class', 'route').attr('stroke-width', L.routeW).attr('stroke-dasharray', dash).attr('filter', 'url(#glow)');
+  function positionRoute(t) {
+    const pts = all.map(w => t.apply(projection([w.lon, w.lat])));
+    const d = lineGen(pts); rShadow.attr('d', d); rLine.attr('d', d);
+  }
+  // Choose a label side per port; flip neighbours whose (wide) labels would
+  // overlap to the opposite side (e.g. Miami/CocoCay, St Thomas/St Maarten).
+  const mpts = ports.map(w => projection([w.lon, w.lat]));
+  const wEst = ports.map(w => w.name.length * L.labelF * 0.55); // approx label width
+  const sides = mpts.map(p => (p[1] < L.map.h*0.18) ? 1 : -1);
+  for (let i = 0; i < mpts.length; i++)
+    for (let k = 0; k < i; k++) {
+      const dx = Math.abs(mpts[i][0]-mpts[k][0]), dy = Math.abs(mpts[i][1]-mpts[k][1]);
+      if (sides[i] === sides[k] && dx < (wEst[i]+wEst[k])/2 && dy < L.labelF*1.6)
+        sides[i] = -sides[k];
+    }
+  const mSel = overlay.selectAll('g.marker').data(ports).enter().append('g').attr('class', 'marker');
+  mSel.each(function (w, i) {
+    const s = d3.select(this), home = w.type === 'home', scn = w.type === 'scenic';
+    const rr = home ? L.markerR*1.3 : scn ? L.markerR*1.15 : L.markerR;
+    if (home) s.append('circle').attr('class', 'port-ring').attr('r', rr + L.markerR).attr('stroke-width', 1.2);
+    s.append('circle').attr('class', scn ? 'port-dot-scenic' : home ? 'port-dot-home' : 'port-dot').attr('r', rr).attr('stroke-width', 1.4);
+    const off = sides[i] > 0 ? (L.labelF + 8) : -(L.labelF*0.6 + 5);
+    s.append('text').attr('class', `lbl${home ? ' lbl-home' : scn ? ' lbl-scenic' : ''}`)
+      .attr('x', 0).attr('y', off).attr('font-size', home ? L.labelF*1.05 : L.labelF).text(w.name);
+  });
+  function positionMarkers(t) {
+    mSel.attr('transform', w => { const p = t.apply(projection([w.lon, w.lat])); return `translate(${p[0]},${p[1]})`; });
+  }
+  return { positionRoute, positionMarkers };
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+//  LAYOUT + COMPOSE  (used by both screen render and sized exports)
+// ════════════════════════════════════════════════════════════════════════════
+
+function computeLayout(W, H, shape) {
+  const S = Math.min(W, H);
+  const L = { shape, W, H, cx: W/2 };
+  L.wheelR       = shape === 'rect' ? 40 : S*0.075;
+  L.shipF        = shape === 'rect' ? 22 : S/27;
+  L.bannerW      = shape === 'circle' ? Math.min(W*0.64, 300) : Math.min(W*0.5, 430);
+  L.bannerH      = shape === 'rect' ? 46 : S*0.078;
+  L.bannerTitleF = shape === 'rect' ? 15 : S/42;
+  L.bannerDateF  = L.bannerTitleF*0.82;
+  L.routeW       = Math.max(2, S/240);
+  L.markerR      = Math.max(3.4, S/175);
+  L.labelF       = Math.max(9, S/66);
+
+  if (shape === 'circle') {
+    const ring = 26;
+    L.ring = ring; L.cy = H/2; L.R = W/2 - ring;
+    const top = L.cy - L.R;
+    L.wheelCY  = top + 16 + L.wheelR;
+    L.shipY    = L.wheelCY + L.wheelR + L.shipF*1.05;
+    L.bannerTop = L.shipY + 8;
+    const headerBottom = L.bannerTop + L.bannerH + 10;
+    const yTop = headerBottom;
+    const yBot = L.cy + L.R - 64;
+    const hwTop = Math.sqrt(Math.max(0, L.R*L.R - (yTop-L.cy)**2));
+    const hwBot = Math.sqrt(Math.max(0, L.R*L.R - (yBot-L.cy)**2));
+    const hw = Math.min(hwTop, hwBot) - 10;
+    L.map = { x: L.cx - hw, y: yTop, w: hw*2, h: yBot - yTop };
+    L.compass = { cx: L.cx, cy: L.cy + L.R - 30, r: 20 };
+    L.showLegend = false;
+  } else {
+    const m = shape === 'square' ? 22 : 14, innerPad = 12, topPad = shape === 'square' ? 18 : 14;
+    L.m = m;
+    L.wheelCY  = m + topPad + L.wheelR;
+    L.shipY    = L.wheelCY + L.wheelR + L.shipF*1.05;
+    L.bannerTop = L.shipY + 8;
+    const mapTop = L.bannerTop + L.bannerH + 14;
+    L.map = { x: m + innerPad, y: mapTop, w: W - 2*(m+innerPad), h: H - mapTop - (m+innerPad) };
+    const co = shape === 'square' ? 40 : 38, cr = shape === 'square' ? 30 : 28;
+    L.compass = { cx: L.map.x + L.map.w - co, cy: L.map.y + L.map.h - co, r: cr };
+    L.showLegend = true;
+  }
+  return L;
+}
+
+// Build the full chart into svgSel. Returns the layout. Wires zoom if interactive.
+function composeChart(svgSel, opts) {
+  const { W, H, shape, itin, startDate, endDate, fitMode, interactive } = opts;
+  svgSel.attr('viewBox', `0 0 ${W} ${H}`).attr('preserveAspectRatio', 'xMidYMid meet').attr('xmlns', 'http://www.w3.org/2000/svg');
+  svgSel.selectAll('*').remove();
+  const L = computeLayout(W, H, shape);
+
+  const defs = svgSel.append('defs');
+  const glow = defs.append('filter').attr('id', 'glow').attr('x', '-30%').attr('y', '-30%').attr('width', '160%').attr('height', '160%');
+  glow.append('feGaussianBlur').attr('stdDeviation', L.routeW*0.7).attr('result', 'b');
+  const fm = glow.append('feMerge'); fm.append('feMergeNode').attr('in', 'b'); fm.append('feMergeNode').attr('in', 'SourceGraphic');
+
+  const clip = defs.append('clipPath').attr('id', 'mapClip');
+  if (shape === 'circle') clip.append('circle').attr('cx', L.cx).attr('cy', L.cy).attr('r', L.R - 2);
+  else clip.append('rect').attr('x', L.map.x).attr('y', L.map.y).attr('width', L.map.w).attr('height', L.map.h).attr('rx', 4);
+
+  svgSel.append('rect').attr('class', 'chart-bg').attr('width', W).attr('height', H);
+  if (shape === 'circle') svgSel.append('circle').attr('class', 'water').attr('cx', L.cx).attr('cy', L.cy).attr('r', L.R - 2);
+  else svgSel.append('rect').attr('class', 'water').attr('x', L.map.x).attr('y', L.map.y).attr('width', L.map.w).attr('height', L.map.h).attr('rx', 4);
+
+  // Clipped map layer
+  const mapWrap = svgSel.append('g').attr('clip-path', 'url(#mapClip)');
+  const gArea = mapWrap.append('g').attr('transform', `translate(${L.map.x},${L.map.y})`);
+  gArea.append('rect').attr('class', 'zoom-catch').attr('width', L.map.w).attr('height', L.map.h).attr('fill', 'transparent');
+  const gGeo = gArea.append('g').attr('class', 'geo');
+  const overlay = gArea.append('g').attr('class', 'overlay');
+
+  const projection = makeProjection(itin.waypoints, { w: L.map.w, h: L.map.h }, fitMode, itin.region);
+  const path = d3.geoPath().projection(projection);
+  drawGeography(gGeo, projection, path);
+  const rm = buildRouteAndMarkers(overlay, projection, itin, L);
+  rm.positionRoute(d3.zoomIdentity);
+  rm.positionMarkers(d3.zoomIdentity);
+
+  // Header chrome: captain's wheel, ship name, itinerary banner (above the map,
+  // so they never overlap the route).
+  const head = svgSel.append('g').attr('class', 'header');
+  drawShipsWheel(head, L.cx, L.wheelCY, L.wheelR);
+  head.append('text').attr('class', 'ship-name').attr('x', L.cx).attr('y', L.shipY).attr('font-size', L.shipF).text(itin.ship);
+  drawBanner(head, L.cx, L.bannerTop, L.bannerW, itin, startDate, endDate, L);
+
+  drawFrame(svgSel, L);
+  drawCompassRose(svgSel.append('g'), L.compass.cx, L.compass.cy, L.compass.r, Math.max(8, L.compass.r*0.34));
+  drawLegend(svgSel, L);
+
+  const wmF = Math.max(7, Math.min(W, H)/95);
+  if (shape === 'circle') {
+    svgSel.append('text').attr('class', 'watermark').attr('x', L.cx).attr('y', L.cy + L.R + L.ring*0.5 + wmF + 2).attr('text-anchor', 'middle').attr('font-size', wmF).text('Royal Caribbean Cruise Route Mapper');
+  } else {
+    svgSel.append('text').attr('class', 'watermark').attr('x', W - L.m - 8).attr('y', H - L.m - 8).attr('text-anchor', 'end').attr('font-size', wmF).text('Royal Caribbean Cruise Route Mapper');
+  }
+
+  if (interactive) {
+    zoomBehavior = d3.zoom().scaleExtent([1, 40]).extent([[0,0],[L.map.w, L.map.h]])
+      .on('zoom', (e) => { gGeo.attr('transform', e.transform); rm.positionRoute(e.transform); rm.positionMarkers(e.transform); });
+    zoomTarget = gArea;
+    gArea.call(zoomBehavior);
+    gArea.call(zoomBehavior.transform, d3.zoomIdentity);
+  }
+  return L;
+}
+
+function renderScreen(itin, startDate, endDate) {
+  const container = svgEl.parentElement;
+  composeChart(d3.select('#cruise-map'), {
+    W: container.clientWidth, H: container.clientHeight,
+    shape: 'rect', itin, startDate, endDate, fitMode: 'region', interactive: true,
+  });
+}
+
+// ─── Zoom controls ──────────────────────────────────────────────────────────────
+document.getElementById('zoom-in').addEventListener('click', () => { if (zoomTarget) zoomTarget.transition().duration(280).call(zoomBehavior.scaleBy, 1.6); });
+document.getElementById('zoom-out').addEventListener('click', () => { if (zoomTarget) zoomTarget.transition().duration(280).call(zoomBehavior.scaleBy, 0.625); });
+document.getElementById('zoom-reset').addEventListener('click', () => { if (zoomTarget) zoomTarget.transition().duration(350).call(zoomBehavior.transform, d3.zoomIdentity); });
+
+// ════════════════════════════════════════════════════════════════════════════
+//  EXPORT
+// ════════════════════════════════════════════════════════════════════════════
+
+function styleAndSerialize(node) {
+  // Ensure exactly one <style> source inside <defs> (never a duplicate attribute).
+  node.querySelectorAll('style').forEach(s => s.remove());
+  node.removeAttribute('style');
   const styleEl = document.createElementNS('http://www.w3.org/2000/svg', 'style');
-  styleEl.textContent = `
-    .svg-bg { fill: #061220; }
-    .ocean-bg { fill: #061220; }
-    .land { fill: #233c2d; stroke: #2e5c3a; stroke-width: 0.6; vector-effect: non-scaling-stroke; }
-    .borders { fill: none; stroke: #3a5e45; stroke-width: 0.5; vector-effect: non-scaling-stroke; }
-    .graticule { fill: none; stroke: rgba(255,255,255,0.04); stroke-width: 0.5; vector-effect: non-scaling-stroke; }
-    .route-line-shadow { fill: none; stroke: rgba(0,0,0,0.5); stroke-width: 4.5; stroke-dasharray: 9 7; stroke-linecap: round; }
-    .route-line { fill: none; stroke: #d4ae50; stroke-width: 2.5; stroke-dasharray: 9 7; stroke-linecap: round; }
-    .port-ring { fill: none; stroke: #e8c96b; stroke-width: 1.2; stroke-dasharray: 3 2; opacity: 0.6; }
-    .port-circle { fill: #c8a84b; stroke: #e8d080; stroke-width: 1.5; }
-    .port-circle-home { fill: #e8c96b; stroke: #ffffff; stroke-width: 1.8; }
-    .port-circle-scenic { fill: #4a90d9; stroke: #80c0ff; stroke-width: 1.5; }
-    .port-label-bg { fill: rgba(5,14,24,0.82); }
-    .port-label { font-family: Arial, sans-serif; font-size: 10.5px; fill: #eeeeee; text-anchor: middle; }
-    .port-label-home { fill: #e8c96b; font-weight: bold; font-size: 11px; }
-    .port-label-scenic { fill: #80c0ff; font-size: 10px; }
-    .map-title { font-family: Georgia, serif; font-size: 15px; fill: #e8c96b; text-anchor: middle; }
-    .map-subtitle { font-family: Arial, sans-serif; font-size: 10.5px; fill: #8a9bb0; text-anchor: middle; }
-    .legend { font-family: Arial, sans-serif; font-size: 10px; fill: #8a9bb0; }
-    .legend-title { fill: #c8a84b; font-size: 10.5px; }
-  `;
+  styleEl.textContent = FONT_IMPORT + MAP_CSS;
+  let defs = node.querySelector('defs');
+  if (!defs) { defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs'); node.insertBefore(defs, node.firstChild); }
+  defs.appendChild(styleEl);
+  return '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(node);
+}
 
-  // Strip any pre-existing <style> nodes and inline style attributes so the
-  // serialized markup has exactly one style source (avoids duplicate attrs).
-  clone.querySelectorAll('style').forEach(s => s.remove());
-  clone.removeAttribute('style');
-  const defsEl = clone.querySelector('defs');
-  if (defsEl) defsEl.appendChild(styleEl);
-  else clone.insertBefore(styleEl, clone.firstChild);
+// "Wide" export: the current on-screen chart, preserving the live zoom/pan.
+function exportCurrentView() {
+  return document.getElementById('cruise-map').cloneNode(true);
+}
 
-  const serializer = new XMLSerializer();
-  const svgStr = '<?xml version="1.0" encoding="UTF-8"?>\n' + serializer.serializeToString(clone);
-  const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+// Sized exports: a fresh, self-contained chart fit to the chosen frame so the
+// whole route sits perfectly inside the 3.5" square or 3.8" circle.
+function buildSizedExport(shape) {
+  const itin = ITINERARIES[itinSelect.value];
+  if (!itin) return null;
+  const dims = shape === 'square' ? { W: 700, H: 700, win: '3.5in', hin: '3.5in' }
+                                   : { W: 760, H: 760, win: '3.8in', hin: '3.8in' };
+  const svg = d3.create('svg').attr('width', dims.win).attr('height', dims.hin);
+  composeChart(svg, { W: dims.W, H: dims.H, shape, itin, startDate: dateStart.value, endDate: dateEnd.value, fitMode: 'route', interactive: false });
+  return svg.node();
+}
+
+exportBtn.addEventListener('click', () => {
+  const shape = exportFormat.value;
+  const node = (shape === 'wide') ? exportCurrentView() : buildSizedExport(shape);
+  if (!node) return;
+  const str = styleAndSerialize(node);
+  const blob = new Blob([str], { type: 'image/svg+xml;charset=utf-8' });
   const url = URL.createObjectURL(blob);
-
   const a = document.createElement('a');
   a.href = url;
   const itin = ITINERARIES[itinSelect.value];
-  a.download = `RC_${itin.name.replace(/[^a-zA-Z0-9]+/g,'_')}_${itin.ship.replace(/[^a-zA-Z0-9]+/g,'_')}_route.svg`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+  const tag = shape === 'square' ? '3.5in_square' : shape === 'circle' ? '3.8in_circle' : 'wide';
+  a.download = `RC_${itin.name.replace(/[^a-zA-Z0-9]+/g,'_')}_${itin.ship.replace(/[^a-zA-Z0-9]+/g,'_')}_${tag}.svg`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(url);
 });
 
