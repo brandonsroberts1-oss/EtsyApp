@@ -1,0 +1,954 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Royal Caribbean Cruise Route Mapper</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
+  <style>
+    :root {
+      --navy: #0a1628;
+      --ocean: #1a3a5c;
+      --blue: #1e6fa8;
+      --gold: #c8a84b;
+      --gold-light: #e8c96b;
+      --white: #f5f5f0;
+      --gray: #8a9bb0;
+      --panel: #0d1f36;
+      --border: #1e3a5c;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Georgia', serif;
+      background: var(--navy);
+      color: var(--white);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      background: linear-gradient(135deg, #0a1628 0%, #1a3a5c 100%);
+      border-bottom: 2px solid var(--gold);
+      padding: 18px 32px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    header .crown { font-size: 2rem; }
+    header h1 {
+      font-size: 1.5rem;
+      letter-spacing: 0.08em;
+      color: var(--gold-light);
+    }
+    header p {
+      font-size: 0.8rem;
+      color: var(--gray);
+      font-family: 'Arial', sans-serif;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .app {
+      display: grid;
+      grid-template-columns: 340px 1fr;
+      flex: 1;
+      height: calc(100vh - 74px);
+    }
+
+    .sidebar {
+      background: var(--panel);
+      border-right: 1px solid var(--border);
+      padding: 24px 20px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .section-title {
+      font-size: 0.7rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--gold);
+      margin-bottom: 10px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    label {
+      display: block;
+      font-size: 0.78rem;
+      color: var(--gray);
+      margin-bottom: 5px;
+      font-family: 'Arial', sans-serif;
+      letter-spacing: 0.04em;
+    }
+
+    select, input[type="text"], input[type="date"] {
+      width: 100%;
+      padding: 9px 12px;
+      background: #0a1628;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--white);
+      font-size: 0.88rem;
+      font-family: 'Arial', sans-serif;
+      transition: border-color 0.2s;
+    }
+
+    select:focus, input:focus {
+      outline: none;
+      border-color: var(--gold);
+    }
+
+    select option { background: #0a1628; }
+
+    .form-group { margin-bottom: 14px; }
+
+    .date-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .btn {
+      width: 100%;
+      padding: 11px;
+      border: none;
+      border-radius: 4px;
+      font-size: 0.9rem;
+      font-family: 'Arial', sans-serif;
+      cursor: pointer;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      transition: all 0.2s;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--gold) 0%, var(--gold-light) 100%);
+      color: var(--navy);
+      font-weight: bold;
+    }
+    .btn-primary:hover { filter: brightness(1.1); }
+
+    .btn-secondary {
+      background: transparent;
+      border: 1px solid var(--gold);
+      color: var(--gold);
+      margin-top: 8px;
+    }
+    .btn-secondary:hover { background: rgba(200,168,75,0.1); }
+    .btn-secondary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .itinerary-preview {
+      background: #071020;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 12px;
+    }
+
+    .port-list { list-style: none; }
+    .port-list li {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 5px 0;
+      font-size: 0.82rem;
+      font-family: 'Arial', sans-serif;
+      color: var(--white);
+      border-bottom: 1px dashed rgba(255,255,255,0.06);
+    }
+    .port-list li:last-child { border-bottom: none; }
+    .port-dot {
+      width: 8px; height: 8px;
+      background: var(--gold);
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .port-list .connector {
+      width: 8px; height: 1px;
+      background: none;
+      position: relative;
+    }
+
+    .map-area {
+      position: relative;
+      background: #061018;
+      overflow: hidden;
+    }
+
+    #map-container {
+      width: 100%;
+      height: 100%;
+    }
+
+    svg#cruise-map {
+      width: 100%;
+      height: 100%;
+    }
+
+    .land { fill: #2a4a3a; stroke: #3a6a52; stroke-width: 0.5; }
+    .graticule { fill: none; stroke: rgba(255,255,255,0.05); stroke-width: 0.5; }
+    .ocean-bg { fill: #0a2035; }
+
+    .route-line {
+      fill: none;
+      stroke: var(--gold);
+      stroke-width: 2;
+      stroke-dasharray: 8 6;
+      stroke-linecap: round;
+    }
+
+    .port-circle {
+      fill: var(--gold);
+      stroke: var(--gold-light);
+      stroke-width: 1.5;
+      cursor: pointer;
+      transition: r 0.2s;
+    }
+    .port-circle:hover { r: 7; }
+
+    .port-label {
+      font-family: 'Arial', sans-serif;
+      font-size: 11px;
+      fill: #ffffff;
+      text-anchor: middle;
+      pointer-events: none;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.9);
+    }
+
+    .port-label-bg {
+      fill: rgba(6,16,24,0.75);
+      rx: 3;
+    }
+
+    .home-port circle { fill: #e8c96b; r: 7; }
+
+    .map-title {
+      font-family: 'Georgia', serif;
+      font-size: 16px;
+      fill: var(--gold-light);
+      text-anchor: middle;
+    }
+
+    .map-subtitle {
+      font-family: 'Arial', sans-serif;
+      font-size: 11px;
+      fill: var(--gray);
+      text-anchor: middle;
+    }
+
+    .compass { opacity: 0.7; }
+
+    .placeholder-msg {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      color: var(--gray);
+      font-family: 'Arial', sans-serif;
+    }
+    .placeholder-msg .big { font-size: 3rem; margin-bottom: 12px; }
+    .placeholder-msg p { font-size: 0.9rem; line-height: 1.6; }
+
+    .legend {
+      font-family: 'Arial', sans-serif;
+      font-size: 10px;
+      fill: var(--gray);
+    }
+    .legend-title { fill: var(--gold); font-size: 11px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <span class="crown">&#9812;</span>
+  <div>
+    <h1>Royal Caribbean Cruise Route Mapper</h1>
+    <p>Visualize &amp; Export Your Cruise Itinerary</p>
+  </div>
+</header>
+
+<div class="app">
+  <aside class="sidebar">
+
+    <div>
+      <div class="section-title">Select Your Cruise</div>
+      <div class="form-group">
+        <label for="itinerary-select">Itinerary</label>
+        <select id="itinerary-select">
+          <option value="">-- Choose an itinerary --</option>
+          <optgroup label="Caribbean">
+            <option value="caribbean_eastern">Eastern Caribbean (7-Night)</option>
+            <option value="caribbean_western">Western Caribbean (7-Night)</option>
+            <option value="caribbean_southern">Southern Caribbean (10-Night)</option>
+            <option value="bahamas">Bahamas Perfect Day (4-Night)</option>
+            <option value="caribbean_ultimate">Ultimate Caribbean (14-Night)</option>
+          </optgroup>
+          <optgroup label="Mediterranean">
+            <option value="med_western">Western Mediterranean (7-Night)</option>
+            <option value="med_eastern">Eastern Mediterranean (9-Night)</option>
+            <option value="med_greek">Greek Isles (7-Night)</option>
+          </optgroup>
+          <optgroup label="Alaska">
+            <option value="alaska_northbound">Alaska Northbound (7-Night)</option>
+            <option value="alaska_southbound">Alaska Southbound (7-Night)</option>
+          </optgroup>
+          <optgroup label="Other">
+            <option value="bermuda">Bermuda (7-Night)</option>
+            <option value="hawaii">Hawaii (12-Night)</option>
+            <option value="mexico_pacific">Mexican Riviera (7-Night)</option>
+            <option value="europe_nordic">Norwegian Fjords (10-Night)</option>
+            <option value="transatlantic">Transatlantic (14-Night)</option>
+          </optgroup>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="ship-select">Ship</label>
+        <select id="ship-select">
+          <option value="">-- Select ship --</option>
+          <optgroup label="Icon Class">
+            <option>Icon of the Seas</option>
+            <option>Star of the Seas</option>
+          </optgroup>
+          <optgroup label="Oasis Class">
+            <option>Wonder of the Seas</option>
+            <option>Symphony of the Seas</option>
+            <option>Harmony of the Seas</option>
+            <option>Allure of the Seas</option>
+            <option>Oasis of the Seas</option>
+          </optgroup>
+          <optgroup label="Quantum Class">
+            <option>Ovation of the Seas</option>
+            <option>Anthem of the Seas</option>
+            <option>Quantum of the Seas</option>
+          </optgroup>
+          <optgroup label="Freedom Class">
+            <option>Freedom of the Seas</option>
+            <option>Liberty of the Seas</option>
+            <option>Independence of the Seas</option>
+          </optgroup>
+          <optgroup label="Voyager Class">
+            <option>Navigator of the Seas</option>
+            <option>Mariner of the Seas</option>
+            <option>Adventure of the Seas</option>
+            <option>Explorer of the Seas</option>
+            <option>Voyager of the Seas</option>
+          </optgroup>
+        </select>
+      </div>
+
+      <div class="form-group date-row">
+        <div>
+          <label for="date-start">Departure</label>
+          <input type="date" id="date-start" />
+        </div>
+        <div>
+          <label for="date-end">Return</label>
+          <input type="date" id="date-end" />
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="section-title">Itinerary Preview</div>
+      <div class="itinerary-preview" id="itinerary-preview">
+        <p style="color: var(--gray); font-size:0.8rem; font-family:Arial,sans-serif;">
+          Select an itinerary above to preview ports of call.
+        </p>
+      </div>
+    </div>
+
+    <div>
+      <button class="btn btn-primary" id="generate-btn">Generate Route Map</button>
+      <button class="btn btn-secondary" id="export-btn" disabled>Export as SVG</button>
+    </div>
+
+  </aside>
+
+  <main class="map-area" id="map-container">
+    <div class="placeholder-msg" id="placeholder">
+      <div class="big">&#9875;</div>
+      <p>Select a Royal Caribbean itinerary<br>and click <strong>Generate Route Map</strong><br>to visualize your cruise.</p>
+    </div>
+    <svg id="cruise-map" style="display:none;"></svg>
+  </main>
+</div>
+
+<script>
+// ─── Itinerary Data ───────────────────────────────────────────────────────────
+const ITINERARIES = {
+  caribbean_eastern: {
+    name: "Eastern Caribbean",
+    region: "Caribbean",
+    ports: [
+      { name: "Miami, FL", lat: 25.775, lon: -80.19, home: true },
+      { name: "Nassau, Bahamas", lat: 25.048, lon: -77.353 },
+      { name: "St. Thomas, USVI", lat: 18.336, lon: -64.924 },
+      { name: "San Juan, Puerto Rico", lat: 18.466, lon: -66.118 },
+      { name: "St. Maarten", lat: 18.035, lon: -63.055 },
+      { name: "Miami, FL", lat: 25.775, lon: -80.19, home: true, returnPort: true },
+    ]
+  },
+  caribbean_western: {
+    name: "Western Caribbean",
+    region: "Caribbean",
+    ports: [
+      { name: "Galveston, TX", lat: 29.301, lon: -94.797, home: true },
+      { name: "Cozumel, Mexico", lat: 20.507, lon: -86.948 },
+      { name: "Roatán, Honduras", lat: 16.323, lon: -86.535 },
+      { name: "Belize City, Belize", lat: 17.251, lon: -88.767 },
+      { name: "Costa Maya, Mexico", lat: 18.731, lon: -87.697 },
+      { name: "Galveston, TX", lat: 29.301, lon: -94.797, home: true, returnPort: true },
+    ]
+  },
+  caribbean_southern: {
+    name: "Southern Caribbean",
+    region: "Caribbean",
+    ports: [
+      { name: "San Juan, Puerto Rico", lat: 18.466, lon: -66.118, home: true },
+      { name: "St. Maarten", lat: 18.035, lon: -63.055 },
+      { name: "Antigua", lat: 17.127, lon: -61.847 },
+      { name: "St. Lucia", lat: 13.909, lon: -60.978 },
+      { name: "Barbados", lat: 13.193, lon: -59.543 },
+      { name: "St. Kitts", lat: 17.358, lon: -62.782 },
+      { name: "St. Thomas, USVI", lat: 18.336, lon: -64.924 },
+      { name: "San Juan, Puerto Rico", lat: 18.466, lon: -66.118, home: true, returnPort: true },
+    ]
+  },
+  bahamas: {
+    name: "Bahamas & Perfect Day",
+    region: "Caribbean",
+    ports: [
+      { name: "Miami, FL", lat: 25.775, lon: -80.19, home: true },
+      { name: "Nassau, Bahamas", lat: 25.048, lon: -77.353 },
+      { name: "Perfect Day, CocoCay", lat: 25.827, lon: -77.856 },
+      { name: "Key West, FL", lat: 24.555, lon: -81.78 },
+      { name: "Miami, FL", lat: 25.775, lon: -80.19, home: true, returnPort: true },
+    ]
+  },
+  caribbean_ultimate: {
+    name: "Ultimate Caribbean",
+    region: "Caribbean",
+    ports: [
+      { name: "Fort Lauderdale, FL", lat: 26.122, lon: -80.143, home: true },
+      { name: "Nassau, Bahamas", lat: 25.048, lon: -77.353 },
+      { name: "St. Thomas, USVI", lat: 18.336, lon: -64.924 },
+      { name: "San Juan, Puerto Rico", lat: 18.466, lon: -66.118 },
+      { name: "Antigua", lat: 17.127, lon: -61.847 },
+      { name: "St. Lucia", lat: 13.909, lon: -60.978 },
+      { name: "Barbados", lat: 13.193, lon: -59.543 },
+      { name: "St. Maarten", lat: 18.035, lon: -63.055 },
+      { name: "Cozumel, Mexico", lat: 20.507, lon: -86.948 },
+      { name: "Fort Lauderdale, FL", lat: 26.122, lon: -80.143, home: true, returnPort: true },
+    ]
+  },
+  med_western: {
+    name: "Western Mediterranean",
+    region: "Mediterranean",
+    ports: [
+      { name: "Barcelona, Spain", lat: 41.385, lon: 2.173, home: true },
+      { name: "Palma, Majorca", lat: 39.57, lon: 2.65 },
+      { name: "Rome (Civitavecchia), Italy", lat: 42.094, lon: 11.799 },
+      { name: "Naples, Italy", lat: 40.853, lon: 14.268 },
+      { name: "Messina (Sicily), Italy", lat: 38.192, lon: 15.556 },
+      { name: "Marseille, France", lat: 43.296, lon: 5.381 },
+      { name: "Barcelona, Spain", lat: 41.385, lon: 2.173, home: true, returnPort: true },
+    ]
+  },
+  med_eastern: {
+    name: "Eastern Mediterranean",
+    region: "Mediterranean",
+    ports: [
+      { name: "Rome (Civitavecchia), Italy", lat: 42.094, lon: 11.799, home: true },
+      { name: "Naples, Italy", lat: 40.853, lon: 14.268 },
+      { name: "Santorini, Greece", lat: 36.461, lon: 25.376 },
+      { name: "Athens (Piraeus), Greece", lat: 37.943, lon: 23.648 },
+      { name: "Mykonos, Greece", lat: 37.444, lon: 25.329 },
+      { name: "Kusadasi (Ephesus), Turkey", lat: 37.858, lon: 27.263 },
+      { name: "Dubrovnik, Croatia", lat: 42.641, lon: 18.108 },
+      { name: "Rome (Civitavecchia), Italy", lat: 42.094, lon: 11.799, home: true, returnPort: true },
+    ]
+  },
+  med_greek: {
+    name: "Greek Isles",
+    region: "Mediterranean",
+    ports: [
+      { name: "Athens (Piraeus), Greece", lat: 37.943, lon: 23.648, home: true },
+      { name: "Mykonos, Greece", lat: 37.444, lon: 25.329 },
+      { name: "Kusadasi (Ephesus), Turkey", lat: 37.858, lon: 27.263 },
+      { name: "Santorini, Greece", lat: 36.461, lon: 25.376 },
+      { name: "Crete (Heraklion), Greece", lat: 35.339, lon: 25.134 },
+      { name: "Rhodes, Greece", lat: 36.434, lon: 28.217 },
+      { name: "Athens (Piraeus), Greece", lat: 37.943, lon: 23.648, home: true, returnPort: true },
+    ]
+  },
+  alaska_northbound: {
+    name: "Alaska Northbound",
+    region: "Alaska",
+    ports: [
+      { name: "Vancouver, BC", lat: 49.285, lon: -123.121, home: true },
+      { name: "Ketchikan, AK", lat: 55.342, lon: -131.648 },
+      { name: "Juneau, AK", lat: 58.301, lon: -134.42 },
+      { name: "Skagway, AK", lat: 59.458, lon: -135.315 },
+      { name: "Glacier Bay", lat: 58.665, lon: -136.0 },
+      { name: "Seward, AK", lat: 60.104, lon: -149.444 },
+    ]
+  },
+  alaska_southbound: {
+    name: "Alaska Southbound",
+    region: "Alaska",
+    ports: [
+      { name: "Seattle, WA", lat: 47.607, lon: -122.332, home: true },
+      { name: "Juneau, AK", lat: 58.301, lon: -134.42 },
+      { name: "Skagway, AK", lat: 59.458, lon: -135.315 },
+      { name: "Icy Strait Point, AK", lat: 58.137, lon: -135.455 },
+      { name: "Ketchikan, AK", lat: 55.342, lon: -131.648 },
+      { name: "Victoria, BC", lat: 48.428, lon: -123.365 },
+      { name: "Seattle, WA", lat: 47.607, lon: -122.332, home: true, returnPort: true },
+    ]
+  },
+  bermuda: {
+    name: "Bermuda",
+    region: "Atlantic",
+    ports: [
+      { name: "Cape Liberty (Bayonne), NJ", lat: 40.665, lon: -74.129, home: true },
+      { name: "King's Wharf, Bermuda", lat: 32.328, lon: -64.838 },
+      { name: "St. George's, Bermuda", lat: 32.381, lon: -64.678 },
+      { name: "Cape Liberty (Bayonne), NJ", lat: 40.665, lon: -74.129, home: true, returnPort: true },
+    ]
+  },
+  hawaii: {
+    name: "Hawaii",
+    region: "Pacific",
+    ports: [
+      { name: "Ensenada, Mexico", lat: 31.867, lon: -116.596, home: true },
+      { name: "Hilo, Hawaii", lat: 19.73, lon: -155.09 },
+      { name: "Honolulu (Oahu), Hawaii", lat: 21.307, lon: -157.858 },
+      { name: "Kahului (Maui), Hawaii", lat: 20.895, lon: -156.474 },
+      { name: "Nawiliwili (Kauai), Hawaii", lat: 21.957, lon: -159.352 },
+      { name: "Ensenada, Mexico", lat: 31.867, lon: -116.596, home: true, returnPort: true },
+    ]
+  },
+  mexico_pacific: {
+    name: "Mexican Riviera",
+    region: "Pacific",
+    ports: [
+      { name: "Los Angeles, CA", lat: 33.754, lon: -118.217, home: true },
+      { name: "Cabo San Lucas, Mexico", lat: 22.889, lon: -109.916 },
+      { name: "Mazatlán, Mexico", lat: 23.25, lon: -106.411 },
+      { name: "Puerto Vallarta, Mexico", lat: 20.613, lon: -105.226 },
+      { name: "Los Angeles, CA", lat: 33.754, lon: -118.217, home: true, returnPort: true },
+    ]
+  },
+  europe_nordic: {
+    name: "Norwegian Fjords",
+    region: "Northern Europe",
+    ports: [
+      { name: "Southampton, UK", lat: 50.9, lon: -1.404, home: true },
+      { name: "Bergen, Norway", lat: 60.391, lon: 5.324 },
+      { name: "Flåm, Norway", lat: 60.863, lon: 7.117 },
+      { name: "Geiranger, Norway", lat: 62.1, lon: 7.206 },
+      { name: "Ålesund, Norway", lat: 62.472, lon: 6.154 },
+      { name: "Stavanger, Norway", lat: 58.97, lon: 5.734 },
+      { name: "Southampton, UK", lat: 50.9, lon: -1.404, home: true, returnPort: true },
+    ]
+  },
+  transatlantic: {
+    name: "Transatlantic Crossing",
+    region: "Transatlantic",
+    ports: [
+      { name: "Fort Lauderdale, FL", lat: 26.122, lon: -80.143, home: true },
+      { name: "Nassau, Bahamas", lat: 25.048, lon: -77.353 },
+      { name: "Ponta Delgada, Azores", lat: 37.738, lon: -25.669 },
+      { name: "Lisbon, Portugal", lat: 38.716, lon: -9.142 },
+      { name: "Cádiz, Spain", lat: 36.529, lon: -6.292 },
+      { name: "Barcelona, Spain", lat: 41.385, lon: 2.173 },
+      { name: "Rome (Civitavecchia), Italy", lat: 42.094, lon: 11.799 },
+    ]
+  },
+};
+
+// ─── Region bounding boxes [lon0, lat0, lon1, lat1] ──────────────────────────
+const REGION_BOUNDS = {
+  Caribbean:        { lon0: -98,  lat0: 8,   lon1: -58,  lat1: 32  },
+  Mediterranean:    { lon0: -6,   lat0: 30,  lon1: 37,   lat1: 48  },
+  Alaska:           { lon0: -156, lat0: 45,  lon1: -118, lat1: 63  },
+  Atlantic:         { lon0: -80,  lat0: 28,  lon1: -55,  lat1: 45  },
+  Pacific:          { lon0: -170, lat0: 15,  lon1: -105, lat1: 40  },
+  "Northern Europe":{ lon0: -12,  lat0: 47,  lon1: 16,   lat1: 66  },
+  Transatlantic:    { lon0: -90,  lat0: 22,  lon1: 20,   lat1: 50  },
+};
+
+// ─── State ────────────────────────────────────────────────────────────────────
+let worldData = null;
+let currentItinerary = null;
+let mapGenerated = false;
+
+// ─── UI Elements ──────────────────────────────────────────────────────────────
+const itinerarySelect = document.getElementById('itinerary-select');
+const shipSelect = document.getElementById('ship-select');
+const dateStart = document.getElementById('date-start');
+const dateEnd = document.getElementById('date-end');
+const generateBtn = document.getElementById('generate-btn');
+const exportBtn = document.getElementById('export-btn');
+const previewEl = document.getElementById('itinerary-preview');
+const placeholder = document.getElementById('placeholder');
+const svgEl = document.getElementById('cruise-map');
+
+// ─── Load World Topology ──────────────────────────────────────────────────────
+async function loadWorld() {
+  const res = await fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json');
+  worldData = await res.json();
+}
+loadWorld();
+
+// ─── Itinerary Select Handler ─────────────────────────────────────────────────
+itinerarySelect.addEventListener('change', () => {
+  const key = itinerarySelect.value;
+  if (!key) {
+    previewEl.innerHTML = '<p style="color:var(--gray);font-size:0.8rem;font-family:Arial,sans-serif;">Select an itinerary above to preview ports of call.</p>';
+    return;
+  }
+  const itin = ITINERARIES[key];
+  currentItinerary = itin;
+
+  // Auto-set dates if not set
+  if (!dateStart.value) {
+    const d = new Date();
+    d.setDate(d.getDate() + 30);
+    dateStart.value = d.toISOString().split('T')[0];
+  }
+  if (!dateEnd.value && dateStart.value) {
+    const d = new Date(dateStart.value);
+    const nights = itin.ports.length - 1;
+    d.setDate(d.getDate() + nights);
+    dateEnd.value = d.toISOString().split('T')[0];
+  }
+
+  // Render port list
+  const uniquePorts = itin.ports.filter((p, i) => !p.returnPort);
+  previewEl.innerHTML = `
+    <div style="font-size:0.75rem;color:var(--gold);font-family:Arial,sans-serif;margin-bottom:8px;">${itin.name}</div>
+    <ul class="port-list">
+      ${uniquePorts.map((p, i) => `
+        <li>
+          <div class="port-dot" style="${p.home ? 'background:#e8c96b;width:10px;height:10px;' : ''}"></div>
+          <span>${p.name}${p.home ? ' <span style="color:var(--gold);font-size:0.7em;">(Home Port)</span>' : ''}</span>
+        </li>
+      `).join('')}
+    </ul>
+  `;
+});
+
+// ─── Generate Map ─────────────────────────────────────────────────────────────
+generateBtn.addEventListener('click', async () => {
+  const key = itinerarySelect.value;
+  if (!key) { alert('Please select an itinerary.'); return; }
+  if (!worldData) {
+    generateBtn.textContent = 'Loading map data...';
+    await loadWorld();
+  }
+
+  const itin = ITINERARIES[key];
+  const ship = shipSelect.value || 'Royal Caribbean Ship';
+  const start = dateStart.value;
+  const end = dateEnd.value;
+
+  generateBtn.textContent = 'Generating...';
+  setTimeout(() => {
+    renderMap(itin, ship, start, end);
+    generateBtn.textContent = 'Generate Route Map';
+    exportBtn.disabled = false;
+    mapGenerated = true;
+    placeholder.style.display = 'none';
+    svgEl.style.display = 'block';
+  }, 50);
+});
+
+// ─── Render Map ───────────────────────────────────────────────────────────────
+function renderMap(itin, ship, startDate, endDate) {
+  const container = document.getElementById('map-container');
+  const W = container.clientWidth;
+  const H = container.clientHeight;
+
+  const svg = d3.select('#cruise-map')
+    .attr('width', W)
+    .attr('height', H)
+    .attr('viewBox', `0 0 ${W} ${H}`)
+    .attr('xmlns', 'http://www.w3.org/2000/svg');
+
+  svg.selectAll('*').remove();
+
+  // Add defs for filters
+  const defs = svg.append('defs');
+  const glow = defs.append('filter').attr('id', 'glow');
+  glow.append('feGaussianBlur').attr('stdDeviation', '2.5').attr('result', 'coloredBlur');
+  const feMerge = glow.append('feMerge');
+  feMerge.append('feMergeNode').attr('in', 'coloredBlur');
+  feMerge.append('feMergeNode').attr('in', 'SourceGraphic');
+
+  // Padding for title/legend
+  const padTop = 60, padBottom = 60, padLeft = 20, padRight = 20;
+  const mapW = W - padLeft - padRight;
+  const mapH = H - padTop - padBottom;
+
+  // Determine projection bounds from itinerary region
+  const bounds = REGION_BOUNDS[itin.region];
+  const ports = itin.ports;
+
+  // Compute auto-fit bounds from actual port coordinates with padding
+  const lons = ports.map(p => p.lon);
+  const lats = ports.map(p => p.lat);
+  let lon0 = Math.min(...lons), lon1 = Math.max(...lons);
+  let lat0 = Math.min(...lats), lat1 = Math.max(...lats);
+
+  // Add padding around ports
+  const lonPad = Math.max((lon1 - lon0) * 0.35, 4);
+  const latPad = Math.max((lat1 - lat0) * 0.35, 3);
+  lon0 -= lonPad; lon1 += lonPad;
+  lat0 -= latPad; lat1 += latPad;
+
+  // Use region bounds if they are wider
+  if (bounds) {
+    lon0 = Math.min(lon0, bounds.lon0);
+    lon1 = Math.max(lon1, bounds.lon1);
+    lat0 = Math.min(lat0, bounds.lat0);
+    lat1 = Math.max(lat1, bounds.lat1);
+  }
+
+  const centerLon = (lon0 + lon1) / 2;
+  const centerLat = (lat0 + lat1) / 2;
+
+  const projection = d3.geoMercator()
+    .center([centerLon, centerLat])
+    .fitSize([mapW, mapH], {
+      type: 'Feature',
+      geometry: {
+        type: 'Polygon',
+        coordinates: [[[lon0,lat0],[lon1,lat0],[lon1,lat1],[lon0,lat1],[lon0,lat0]]]
+      }
+    });
+
+  const path = d3.geoPath().projection(projection);
+
+  // Map group offset
+  const mapGroup = svg.append('g')
+    .attr('transform', `translate(${padLeft}, ${padTop})`);
+
+  // Ocean background
+  mapGroup.append('rect')
+    .attr('class', 'ocean-bg')
+    .attr('width', mapW)
+    .attr('height', mapH)
+    .attr('rx', 6);
+
+  // Graticule
+  const graticule = d3.geoGraticule().step([10, 10]);
+  mapGroup.append('path')
+    .datum(graticule())
+    .attr('class', 'graticule')
+    .attr('d', path);
+
+  // Land
+  const countries = topojson.feature(worldData, worldData.objects.countries);
+  mapGroup.append('path')
+    .datum(countries)
+    .attr('class', 'land')
+    .attr('d', path);
+
+  // Country borders
+  mapGroup.append('path')
+    .datum(topojson.mesh(worldData, worldData.objects.countries, (a, b) => a !== b))
+    .attr('fill', 'none')
+    .attr('stroke', '#4a7a5a')
+    .attr('stroke-width', 0.3)
+    .attr('d', path);
+
+  // Route line
+  const routeCoords = ports.map(p => projection([p.lon, p.lat]));
+  const lineGenerator = d3.line().x(d => d[0]).y(d => d[1]).curve(d3.curveCatmullRom.alpha(0.5));
+
+  // Shadow for route
+  mapGroup.append('path')
+    .datum(routeCoords)
+    .attr('fill', 'none')
+    .attr('stroke', 'rgba(0,0,0,0.4)')
+    .attr('stroke-width', 4)
+    .attr('stroke-dasharray', '8 6')
+    .attr('d', lineGenerator);
+
+  mapGroup.append('path')
+    .datum(routeCoords)
+    .attr('class', 'route-line')
+    .attr('d', lineGenerator)
+    .attr('filter', 'url(#glow)');
+
+  // Port markers and labels
+  const uniquePorts = ports.filter((p, i) =>
+    !p.returnPort && !ports.slice(0, i).some(q => q.name === p.name)
+  );
+
+  uniquePorts.forEach((port) => {
+    const [x, y] = projection([port.lon, port.lat]);
+    const g = mapGroup.append('g').attr('class', port.home ? 'home-port' : 'port');
+
+    // Outer ring for home port
+    if (port.home) {
+      g.append('circle')
+        .attr('cx', x).attr('cy', y)
+        .attr('r', 9)
+        .attr('fill', 'none')
+        .attr('stroke', '#e8c96b')
+        .attr('stroke-width', 1.5)
+        .attr('stroke-dasharray', '3 2')
+        .attr('opacity', 0.7);
+    }
+
+    g.append('circle')
+      .attr('class', 'port-circle')
+      .attr('cx', x).attr('cy', y)
+      .attr('r', port.home ? 6 : 5)
+      .attr('fill', port.home ? '#e8c96b' : '#c8a84b')
+      .attr('stroke', port.home ? '#fff' : '#e8c96b')
+      .attr('stroke-width', 1.5);
+
+    // Label placement: try to avoid overlap
+    const labelY = y < mapH * 0.15 ? y + 20 : y - 14;
+    const labelX = x;
+
+    // Label background
+    const labelText = port.name;
+    const charW = 6.2;
+    const lblW = labelText.length * charW + 8;
+    g.append('rect')
+      .attr('x', labelX - lblW / 2)
+      .attr('y', labelY - 11)
+      .attr('width', lblW)
+      .attr('height', 14)
+      .attr('class', 'port-label-bg')
+      .attr('rx', 2);
+
+    g.append('text')
+      .attr('class', 'port-label')
+      .attr('x', labelX)
+      .attr('y', labelY)
+      .text(labelText)
+      .attr('font-size', port.home ? '11px' : '10px')
+      .attr('font-weight', port.home ? 'bold' : 'normal')
+      .attr('fill', port.home ? '#e8c96b' : '#ffffff');
+  });
+
+  // Compass rose
+  drawCompass(svg, W - 62, H - 62, 32);
+
+  // Title
+  svg.append('text')
+    .attr('class', 'map-title')
+    .attr('x', W / 2)
+    .attr('y', 32)
+    .text(`${itin.name} — ${ship}`);
+
+  if (startDate && endDate) {
+    svg.append('text')
+      .attr('class', 'map-subtitle')
+      .attr('x', W / 2)
+      .attr('y', 48)
+      .text(`${formatDate(startDate)} – ${formatDate(endDate)}`);
+  }
+
+  // Legend
+  const lx = padLeft + 10, ly = padTop + mapH - 54;
+  const leg = mapGroup.append('g').attr('transform', `translate(10, ${mapH - 60})`);
+  leg.append('rect').attr('width', 148).attr('height', 56).attr('fill', 'rgba(6,16,24,0.8)').attr('rx', 4);
+  leg.append('text').attr('class', 'legend legend-title').attr('x', 8).attr('y', 16).text('LEGEND');
+  leg.append('line').attr('x1', 8).attr('y1', 30).attr('x2', 28).attr('y2', 30)
+    .attr('stroke', '#c8a84b').attr('stroke-width', 2).attr('stroke-dasharray', '5 4');
+  leg.append('text').attr('class', 'legend').attr('x', 34).attr('y', 34).text('Cruise Route');
+  leg.append('circle').attr('cx', 18).attr('cy', 46).attr('r', 5).attr('fill', '#e8c96b').attr('stroke', '#fff').attr('stroke-width', 1.5);
+  leg.append('text').attr('class', 'legend').attr('x', 34).attr('y', 50).text('Home Port / Port of Call');
+
+  // RC watermark
+  svg.append('text')
+    .attr('x', W - padRight)
+    .attr('y', H - 10)
+    .attr('text-anchor', 'end')
+    .attr('font-family', 'Arial, sans-serif')
+    .attr('font-size', '9px')
+    .attr('fill', 'rgba(200,168,75,0.4)')
+    .text('Royal Caribbean Cruise Route Mapper');
+}
+
+function drawCompass(svg, cx, cy, r) {
+  const g = svg.append('g').attr('class', 'compass').attr('transform', `translate(${cx},${cy})`);
+  g.append('circle').attr('r', r).attr('fill', 'rgba(6,16,24,0.8)').attr('stroke', '#c8a84b').attr('stroke-width', 1);
+
+  // Cardinal arrows
+  const pts = [[0,-r+4],[4,0],[0,r-4],[-4,0]];
+  // N arrow (gold)
+  g.append('polygon').attr('points', `0,${-r+6} 4,0 0,-2 -4,0`).attr('fill', '#e8c96b');
+  g.append('polygon').attr('points', `0,${r-6} 4,0 0,2 -4,0`).attr('fill', '#8a9bb0');
+
+  // Cardinal labels
+  [['N',0,-r-3],['S',0,r+10],['E',r+7,4],['W',-r-7,4]].forEach(([lbl,dx,dy]) => {
+    g.append('text')
+      .attr('x', dx).attr('y', dy)
+      .attr('text-anchor', 'middle')
+      .attr('font-family', 'Arial').attr('font-size', '8px')
+      .attr('fill', lbl === 'N' ? '#e8c96b' : '#8a9bb0')
+      .attr('font-weight', 'bold')
+      .text(lbl);
+  });
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr + 'T00:00:00');
+  return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+}
+
+// ─── SVG Export ───────────────────────────────────────────────────────────────
+exportBtn.addEventListener('click', () => {
+  const svgNode = document.getElementById('cruise-map');
+  const serializer = new XMLSerializer();
+  let svgStr = serializer.serializeToString(svgNode);
+
+  // Inject styles inline
+  const styles = `
+    <style>
+      text { font-family: Arial, sans-serif; }
+      .ocean-bg { fill: #0a2035; }
+      .land { fill: #2a4a3a; stroke: #3a6a52; stroke-width: 0.5; }
+      .graticule { fill: none; stroke: rgba(255,255,255,0.05); stroke-width: 0.5; }
+      .route-line { fill: none; stroke: #c8a84b; stroke-width: 2; stroke-dasharray: 8 6; stroke-linecap: round; }
+      .port-circle { fill: #c8a84b; stroke: #e8c96b; stroke-width: 1.5; }
+      .port-label { font-size: 10px; fill: #ffffff; text-anchor: middle; }
+      .port-label-bg { fill: rgba(6,16,24,0.75); }
+      .map-title { font-family: Georgia, serif; font-size: 16px; fill: #e8c96b; text-anchor: middle; }
+      .map-subtitle { font-family: Arial, sans-serif; font-size: 11px; fill: #8a9bb0; text-anchor: middle; }
+    </style>
+  `;
+  svgStr = svgStr.replace('<svg', `<svg style="background:#0a1628"` );
+  svgStr = svgStr.replace('</defs>', `</defs>${styles}`);
+
+  const blob = new Blob([svgStr], { type: 'image/svg+xml' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+
+  const itin = ITINERARIES[itinerarySelect.value];
+  const ship = (shipSelect.value || 'cruise').replace(/\s+/g, '_');
+  a.download = `${itin ? itin.name.replace(/\s+/g,'_') : 'cruise'}_${ship}_route.svg`;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+</script>
+</body>
+</html>
