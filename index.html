@@ -232,9 +232,12 @@
     .placeholder-msg p { font-size: 0.85rem; line-height: 1.7; }
 
     /* ── SVG map internals ───────────────────────────────────── */
+    /* vector-effect keeps coastlines/grid a constant on-screen width as the
+       geography layer is scaled up on zoom, so they stay crisp (not blocky). */
     .ocean-bg  { fill: #061220; }
-    .land      { fill: #233c2d; stroke: #2e5c3a; stroke-width: 0.6; }
-    .graticule { fill: none; stroke: rgba(255,255,255,0.04); stroke-width: 0.5; }
+    .land      { fill: #233c2d; stroke: #2e5c3a; stroke-width: 0.6; vector-effect: non-scaling-stroke; }
+    .borders   { fill: none; stroke: #3a5e45; stroke-width: 0.5; vector-effect: non-scaling-stroke; }
+    .graticule { fill: none; stroke: rgba(255,255,255,0.04); stroke-width: 0.5; vector-effect: non-scaling-stroke; }
 
     .route-line-shadow {
       fill: none;
@@ -717,6 +720,7 @@ const REGION_BOUNDS = {
 // ─── State ────────────────────────────────────────────────────────────────────
 let worldData = null;
 let zoomBehavior = null;
+let zoomTarget = null;
 let currentKey = null;
 
 // ─── UI refs ──────────────────────────────────────────────────────────────────
@@ -733,8 +737,19 @@ const zoomHint     = document.getElementById('zoom-hint');
 
 // ─── Pre-load world data ──────────────────────────────────────────────────────
 async function loadWorld() {
-  const res = await fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json');
-  worldData = await res.json();
+  // 50m resolution gives far more coastline detail (and reveals small Caribbean
+  // islands) than 110m, so zooming in actually shows more detail. Fall back to
+  // 110m if the larger file fails to load.
+  const sources = [
+    'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-50m.json',
+    'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json',
+  ];
+  for (const url of sources) {
+    try {
+      const res = await fetch(url);
+      if (res.ok) { worldData = await res.json(); return; }
+    } catch (e) { /* try next source */ }
+  }
 }
 loadWorld();
 
@@ -819,27 +834,29 @@ function renderMap(itin, startDate, endDate) {
 
   svg.selectAll('*').remove();
 
-  // Defs
+  // ── Layout ──────────────────────────────────────────────────
+  const padT = 52, padB = 52, padL = 16, padR = 16;
+  const mapW = W - padL - padR;
+  const mapH = H - padT - padB;
+
+  // ── Defs: glow filter + clip path ───────────────────────────
   const defs = svg.append('defs');
   const glow = defs.append('filter').attr('id', 'glow').attr('x', '-30%').attr('y', '-30%').attr('width', '160%').attr('height', '160%');
   glow.append('feGaussianBlur').attr('stdDeviation', '2').attr('result', 'blur');
   const feMerge = glow.append('feMerge');
   feMerge.append('feMergeNode').attr('in', 'blur');
   feMerge.append('feMergeNode').attr('in', 'SourceGraphic');
+  // Clip geography + route to the map frame so zoomed/panned content never
+  // spills over the title, legend or compass (and exports cleanly).
+  defs.append('clipPath').attr('id', 'mapClip')
+    .append('rect').attr('x', 0).attr('y', 0).attr('width', mapW).attr('height', mapH).attr('rx', 4);
 
-  // Background for the full SVG (for export)
-  svg.append('rect')
-    .attr('width', W).attr('height', H)
-    .attr('fill', '#061220')
-    .attr('class', 'svg-bg');
+  // Full-frame background (guarantees a filled backdrop in the exported SVG)
+  svg.append('rect').attr('width', W).attr('height', H).attr('class', 'svg-bg').attr('fill', '#061220');
 
-  // ── Projection ──────────────────────────────────────────────
-  const padT = 52, padB = 52, padL = 16, padR = 16;
-  const mapW = W - padL - padR;
-  const mapH = H - padT - padB;
-
-  const visiblePorts = itin.waypoints.filter(w => w.type !== 'sea');
+  // ── Projection (fit region to the frame) ────────────────────
   const allWpts = itin.waypoints;
+  const visiblePorts = allWpts.filter(w => w.type !== 'sea');
   const lons = allWpts.map(w => w.lon);
   const lats = allWpts.map(w => w.lat);
   let lon0 = Math.min(...lons), lon1 = Math.max(...lons);
@@ -848,108 +865,103 @@ function renderMap(itin, startDate, endDate) {
   const latSpan = lat1 - lat0 || 8;
   lon0 -= lonSpan * 0.28; lon1 += lonSpan * 0.28;
   lat0 -= latSpan * 0.28; lat1 += latSpan * 0.28;
-
   const bounds = REGION_BOUNDS[itin.region];
   if (bounds) {
-    lon0 = Math.min(lon0, bounds.lon0);
-    lon1 = Math.max(lon1, bounds.lon1);
-    lat0 = Math.min(lat0, bounds.lat0);
-    lat1 = Math.max(lat1, bounds.lat1);
+    lon0 = Math.min(lon0, bounds.lon0); lon1 = Math.max(lon1, bounds.lon1);
+    lat0 = Math.min(lat0, bounds.lat0); lat1 = Math.max(lat1, bounds.lat1);
   }
-
-  const fitGeoJSON = { type: 'Feature', geometry: { type: 'Polygon', coordinates: [[[lon0,lat0],[lon1,lat0],[lon1,lat1],[lon0,lat1],[lon0,lat0]]] } };
+  // Fit to the region by its corner POINTS (a MultiPoint), not a Polygon: a
+  // spherical polygon's ring winding can make d3 fit the whole globe instead of
+  // the small region (which would render the entire world map zoomed out).
+  const fitGeoJSON = { type: 'MultiPoint', coordinates: [[lon0,lat0],[lon1,lat0],[lon1,lat1],[lon0,lat1]] };
   const projection = d3.geoMercator().fitSize([mapW, mapH], fitGeoJSON);
   const path = d3.geoPath().projection(projection);
 
-  // ── Zoom behaviour ──────────────────────────────────────────
-  const zoomGroup = svg.append('g').attr('class', 'zoom-group').attr('transform', `translate(${padL},${padT})`);
+  // ── Layer structure ─────────────────────────────────────────
+  //  mapRoot (translate by pad)   ← zoom behaviour is attached here
+  //    ocean-bg               (static frame backdrop)
+  //    clipWrap               (clipped to the map frame)
+  //      gGeo                 (gets the zoom transform → geography scales)
+  //      overlay              (route + markers; kept at constant on-screen size)
+  //    chrome                 (static compass + legend, never scaled)
+  const mapRoot = svg.append('g').attr('class', 'map-root').attr('transform', `translate(${padL},${padT})`);
+  mapRoot.append('rect').attr('class', 'ocean-bg').attr('width', mapW).attr('height', mapH).attr('rx', 4);
 
-  zoomBehavior = d3.zoom()
-    .scaleExtent([0.8, 20])
-    .on('zoom', event => {
-      zoomGroup.attr('transform', `translate(${padL + event.transform.x},${padT + event.transform.y}) scale(${event.transform.k})`);
-    });
+  const clipWrap = mapRoot.append('g').attr('clip-path', 'url(#mapClip)');
+  const gGeo = clipWrap.append('g').attr('class', 'geo');
+  const overlay = clipWrap.append('g').attr('class', 'overlay');
 
-  svg.call(zoomBehavior);
-
-  // Ocean
-  zoomGroup.append('rect')
-    .attr('class', 'ocean-bg')
-    .attr('width', mapW).attr('height', mapH)
-    .attr('rx', 4);
-
-  // Graticule
+  // Geography (scales with zoom; strokes stay constant via non-scaling-stroke)
   const graticule = d3.geoGraticule().step([10, 10]);
-  zoomGroup.append('path').datum(graticule()).attr('class', 'graticule').attr('d', path);
+  gGeo.append('path').datum(graticule()).attr('class', 'graticule').attr('d', path);
+  gGeo.append('path').datum(topojson.feature(worldData, worldData.objects.countries)).attr('class', 'land').attr('d', path);
+  gGeo.append('path').datum(topojson.mesh(worldData, worldData.objects.countries, (a,b) => a !== b)).attr('class', 'borders').attr('d', path);
 
-  // Land
-  zoomGroup.append('path')
-    .datum(topojson.feature(worldData, worldData.objects.countries))
-    .attr('class', 'land').attr('d', path);
-
-  // Borders
-  zoomGroup.append('path')
-    .datum(topojson.mesh(worldData, worldData.objects.countries, (a,b) => a !== b))
-    .attr('fill', 'none').attr('stroke', '#3a5e45').attr('stroke-width', 0.4).attr('d', path);
-
-  // ── Route line ──────────────────────────────────────────────
-  const lineCoords = allWpts.map(w => projection([w.lon, w.lat]));
+  // ── Route (lives in the overlay so its width / dash / glow stay constant
+  //    regardless of zoom; only its geometry is recomputed per zoom) ──────────
   const lineGen = d3.line().x(d => d[0]).y(d => d[1]).curve(d3.curveCatmullRom.alpha(0.5));
+  const routeShadow = overlay.append('path').attr('class', 'route-line-shadow');
+  const routeLine   = overlay.append('path').attr('class', 'route-line').attr('filter', 'url(#glow)');
 
-  zoomGroup.append('path').datum(lineCoords).attr('class', 'route-line-shadow').attr('d', lineGen);
-  zoomGroup.append('path').datum(lineCoords).attr('class', 'route-line').attr('d', lineGen).attr('filter', 'url(#glow)');
+  function positionRoute(t) {
+    const pts = allWpts.map(w => t.apply(projection([w.lon, w.lat])));
+    const d = lineGen(pts);
+    routeShadow.attr('d', d);
+    routeLine.attr('d', d);
+  }
 
-  // ── Port markers ────────────────────────────────────────────
-  // Deduplicate by name (home ports appear twice)
+  // ── Port markers (constant on-screen size; only the group moves on zoom) ──
   const seen = new Set();
-  const deduped = visiblePorts.filter(w => {
-    if (seen.has(w.name)) return false;
-    seen.add(w.name);
-    return true;
-  });
+  const deduped = visiblePorts.filter(w => { if (seen.has(w.name)) return false; seen.add(w.name); return true; });
 
-  deduped.forEach(w => {
-    const [x, y] = projection([w.lon, w.lat]);
-    const g = zoomGroup.append('g');
-    const isHome = w.type === 'home';
-    const isScenic = w.type === 'scenic';
+  const markerSel = overlay.selectAll('g.marker').data(deduped).enter().append('g').attr('class', 'marker');
+  markerSel.each(function (w) {
+    const sel = d3.select(this);
+    const isHome = w.type === 'home', isScenic = w.type === 'scenic';
     const r = isHome ? 6 : isScenic ? 5 : 4.5;
-
-    if (isHome) {
-      g.append('circle').attr('class', 'port-ring').attr('cx', x).attr('cy', y).attr('r', 10);
-    }
-    g.append('circle')
+    if (isHome) sel.append('circle').attr('class', 'port-ring').attr('r', 10);
+    sel.append('circle')
       .attr('class', isScenic ? 'port-circle-scenic' : isHome ? 'port-circle-home' : 'port-circle')
-      .attr('cx', x).attr('cy', y).attr('r', r);
-
-    // Label
-    const txt = w.name;
-    const charW = 5.8;
-    const lblW = Math.min(txt.length * charW + 8, 200);
-    const lblY = (y < mapH * 0.2) ? y + 19 : y - 13;
-    g.append('rect')
-      .attr('class', 'port-label-bg')
-      .attr('x', x - lblW/2).attr('y', lblY - 10)
-      .attr('width', lblW).attr('height', 13).attr('rx', 2);
-    g.append('text')
+      .attr('r', r);
+    const lblW = Math.min(w.name.length * 5.8 + 8, 220);
+    const y0 = projection([w.lon, w.lat])[1];
+    const offY = (y0 < mapH * 0.18) ? 19 : -13;   // drop the label below if near the top edge
+    sel.append('rect').attr('class', 'port-label-bg')
+      .attr('x', -lblW/2).attr('y', offY - 10).attr('width', lblW).attr('height', 13).attr('rx', 2);
+    sel.append('text')
       .attr('class', `port-label${isHome ? ' port-label-home' : isScenic ? ' port-label-scenic' : ''}`)
-      .attr('x', x).attr('y', lblY)
-      .text(txt);
+      .attr('x', 0).attr('y', offY).text(w.name);
   });
 
-  // ── Compass rose ────────────────────────────────────────────
-  drawCompass(zoomGroup, mapW - 46, mapH - 46, 28);
+  function positionMarkers(t) {
+    markerSel.attr('transform', w => { const p = t.apply(projection([w.lon, w.lat])); return `translate(${p[0]},${p[1]})`; });
+  }
 
-  // ── Legend ──────────────────────────────────────────────────
-  const leg = zoomGroup.append('g').attr('transform', `translate(8, ${mapH - 70})`);
+  // ── Zoom: geography scales for detail, annotations stay readable ──────────
+  zoomBehavior = d3.zoom()
+    .scaleExtent([1, 40])
+    .extent([[0, 0], [mapW, mapH]])
+    .on('zoom', (event) => {
+      const t = event.transform;
+      gGeo.attr('transform', t);   // scales land/coastlines → reveals detail
+      positionRoute(t);            // route follows, but keeps constant width
+      positionMarkers(t);          // markers + labels follow, but stay same size
+    });
+  zoomTarget = mapRoot;
+  mapRoot.call(zoomBehavior);
+
+  // ── Chrome: compass + legend (static, never scaled) ──────────
+  const chrome = mapRoot.append('g').attr('class', 'chrome');
+  drawCompass(chrome, mapW - 46, mapH - 46, 28);
+
+  const leg = chrome.append('g').attr('transform', `translate(8, ${mapH - 70})`);
   leg.append('rect').attr('width', 160).attr('height', 66).attr('fill', 'rgba(5,14,24,0.85)').attr('rx', 3);
   leg.append('text').attr('class', 'legend legend-title').attr('x', 8).attr('y', 15).text('LEGEND');
-
   const legendItems = [
-    { label: 'Home Port',        color: '#e8c96b', dash: null,  r: 5  },
-    { label: 'Port of Call',     color: '#c8a84b', dash: null,  r: 4  },
-    { label: 'Scenic Cruising',  color: '#4a90d9', dash: null,  r: 4  },
-    { label: 'Cruise Route',     color: '#d4ae50', dash: '7 5', r: null },
+    { label: 'Home Port',       color: '#e8c96b', dash: null,  r: 5  },
+    { label: 'Port of Call',    color: '#c8a84b', dash: null,  r: 4  },
+    { label: 'Scenic Cruising', color: '#4a90d9', dash: null,  r: 4  },
+    { label: 'Cruise Route',    color: '#d4ae50', dash: '7 5', r: null },
   ];
   legendItems.forEach((item, i) => {
     const ly = 28 + i * 13;
@@ -957,27 +969,27 @@ function renderMap(itin, startDate, endDate) {
       leg.append('line').attr('x1', 8).attr('y1', ly).attr('x2', 26).attr('y2', ly)
         .attr('stroke', item.color).attr('stroke-width', 2).attr('stroke-dasharray', item.dash);
     } else {
-      leg.append('circle').attr('cx', 17).attr('cy', ly - 1).attr('r', item.r)
-        .attr('fill', item.color);
+      leg.append('circle').attr('cx', 17).attr('cy', ly - 1).attr('r', item.r).attr('fill', item.color);
     }
     leg.append('text').attr('class', 'legend').attr('x', 32).attr('y', ly + 3).text(item.label);
   });
 
-  // ── Title + subtitle (outside zoom group) ────────────────────
+  // ── Title / subtitle / watermark (static top-level) ──────────
   svg.append('text').attr('class', 'map-title').attr('x', W/2).attr('y', 24)
     .text(`${itin.name} — ${itin.ship}`);
   if (startDate && endDate) {
     svg.append('text').attr('class', 'map-subtitle').attr('x', W/2).attr('y', 38)
       .text(`${formatDate(startDate)} – ${formatDate(endDate)}`);
   }
-
-  // Watermark
   svg.append('text')
     .attr('x', W - 8).attr('y', H - 8)
     .attr('text-anchor', 'end')
     .attr('font-family', 'Arial,sans-serif').attr('font-size', '8px')
     .attr('fill', 'rgba(200,168,75,0.35)')
     .text('Royal Caribbean Cruise Route Mapper');
+
+  // Prime the layers at the identity transform (also resets prior zoom state)
+  mapRoot.call(zoomBehavior.transform, d3.zoomIdentity);
 }
 
 // ─── Compass rose ─────────────────────────────────────────────────────────────
@@ -993,34 +1005,35 @@ function drawCompass(g, cx, cy, r) {
   });
 }
 
-// ─── Zoom controls ────────────────────────────────────────────────────────────
+// ─── Zoom controls (operate on the same node the zoom behaviour is bound to) ──
 document.getElementById('zoom-in').addEventListener('click', () => {
-  d3.select('#cruise-map').transition().duration(280).call(zoomBehavior.scaleBy, 1.6);
+  if (zoomTarget) zoomTarget.transition().duration(280).call(zoomBehavior.scaleBy, 1.6);
 });
 document.getElementById('zoom-out').addEventListener('click', () => {
-  d3.select('#cruise-map').transition().duration(280).call(zoomBehavior.scaleBy, 0.625);
+  if (zoomTarget) zoomTarget.transition().duration(280).call(zoomBehavior.scaleBy, 0.625);
 });
 document.getElementById('zoom-reset').addEventListener('click', () => {
-  d3.select('#cruise-map').transition().duration(350).call(zoomBehavior.transform, d3.zoomIdentity);
+  if (zoomTarget) zoomTarget.transition().duration(350).call(zoomBehavior.transform, d3.zoomIdentity);
 });
 
-// ─── SVG Export (fixed: no duplicate style attribute) ────────────────────────
+// ─── SVG Export ──────────────────────────────────────────────────────────────
+// Exports exactly what is on screen, INCLUDING the current zoom/pan, because we
+// clone the live SVG without resetting the zoom transform. Styles are injected
+// as a single <style> element (never as a second style attribute, which is what
+// caused the previous "Attribute style redefined" parse error).
 exportBtn.addEventListener('click', () => {
   const svgNode = document.getElementById('cruise-map');
 
-  // Reset zoom to identity so export shows full map
-  d3.select('#cruise-map').call(zoomBehavior.transform, d3.zoomIdentity);
-
-  // Clone the SVG node so we can safely mutate for export
+  // Clone the current (zoomed/panned) SVG as-is — the zoom level is preserved.
   const clone = svgNode.cloneNode(true);
 
-  // Inline font/style as a <style> element (no attribute mutation)
   const styleEl = document.createElementNS('http://www.w3.org/2000/svg', 'style');
   styleEl.textContent = `
     .svg-bg { fill: #061220; }
     .ocean-bg { fill: #061220; }
-    .land { fill: #233c2d; stroke: #2e5c3a; stroke-width: 0.6; }
-    .graticule { fill: none; stroke: rgba(255,255,255,0.04); stroke-width: 0.5; }
+    .land { fill: #233c2d; stroke: #2e5c3a; stroke-width: 0.6; vector-effect: non-scaling-stroke; }
+    .borders { fill: none; stroke: #3a5e45; stroke-width: 0.5; vector-effect: non-scaling-stroke; }
+    .graticule { fill: none; stroke: rgba(255,255,255,0.04); stroke-width: 0.5; vector-effect: non-scaling-stroke; }
     .route-line-shadow { fill: none; stroke: rgba(0,0,0,0.5); stroke-width: 4.5; stroke-dasharray: 9 7; stroke-linecap: round; }
     .route-line { fill: none; stroke: #d4ae50; stroke-width: 2.5; stroke-dasharray: 9 7; stroke-linecap: round; }
     .port-ring { fill: none; stroke: #e8c96b; stroke-width: 1.2; stroke-dasharray: 3 2; opacity: 0.6; }
@@ -1037,24 +1050,23 @@ exportBtn.addEventListener('click', () => {
     .legend-title { fill: #c8a84b; font-size: 10.5px; }
   `;
 
-  // Remove any existing <style> children before adding ours
+  // Strip any pre-existing <style> nodes and inline style attributes so the
+  // serialized markup has exactly one style source (avoids duplicate attrs).
   clone.querySelectorAll('style').forEach(s => s.remove());
-  // Remove inline style attribute if present (avoids "style redefined" error)
   clone.removeAttribute('style');
-  // Insert <style> as first child inside defs, or prepend to SVG
   const defsEl = clone.querySelector('defs');
   if (defsEl) defsEl.appendChild(styleEl);
   else clone.insertBefore(styleEl, clone.firstChild);
 
   const serializer = new XMLSerializer();
-  const svgStr = serializer.serializeToString(clone);
+  const svgStr = '<?xml version="1.0" encoding="UTF-8"?>\n' + serializer.serializeToString(clone);
   const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
   const url = URL.createObjectURL(blob);
 
   const a = document.createElement('a');
   a.href = url;
   const itin = ITINERARIES[itinSelect.value];
-  a.download = `RC_${(itin.name).replace(/[^a-zA-Z0-9]+/g,'_')}_${itin.ship.replace(/[^a-zA-Z0-9]+/g,'_')}_route.svg`;
+  a.download = `RC_${itin.name.replace(/[^a-zA-Z0-9]+/g,'_')}_${itin.ship.replace(/[^a-zA-Z0-9]+/g,'_')}_route.svg`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
