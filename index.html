@@ -369,28 +369,27 @@
 
 const ITINERARIES = {
 
-  // ── Icon of the Seas, Miami RT ────────────────────────────────────────────
   icon_eastern: {
     name: "Eastern Caribbean & Perfect Day",
     nights: 7,
     ship: "Icon of the Seas",
     homePort: "Miami, FL",
     region: "Caribbean",
-    // Confirmed: Miami → St. Maarten → St. Thomas → CocoCay → Miami
-    // Day 1 Miami, Day 2 sea, Day 3 St. Maarten, Day 4 St. Thomas,
-    // Day 5 sea, Day 6 CocoCay, Day 7 sea, Day 8 Miami
     waypoints: [
-      { name: "Miami, FL",               lat: 25.775,  lon: -80.190,  type: "home",   day: 1  },
-      { name: "At Sea",                  lat: 24.0,    lon: -77.5,    type: "sea",    day: 2  },
-      { name: "At Sea",                  lat: 22.0,    lon: -74.0,    type: "sea",    day: 2  },
-      { name: "At Sea",                  lat: 20.5,    lon: -69.5,    type: "sea",    day: 2  },
-      { name: "Philipsburg, St. Maarten",lat: 18.015,  lon: -63.047,  type: "port",   day: 3  },
+      { name: "Miami, FL", lat: 25.775, lon: -80.19, type: "home", day: 1 },
+      { name: "At Sea", lat: 26.6, lon: -79, type: "sea" },
+      { name: "At Sea", lat: 28.096, lon: -76.604, type: "sea" },
+      { name: "At Sea", lat: 27, lon: -74, type: "sea" },
+      { name: "At Sea", lat: 21, lon: -65, type: "sea" },
+      { name: "Philipsburg, St. Maarten", lat: 18.015, lon: -63.047, type: "port", day: 3 },
       { name: "Charlotte Amalie, St. Thomas, USVI", lat: 18.337, lon: -64.925, type: "port", day: 4 },
-      { name: "At Sea",                  lat: 20.0,    lon: -68.0,    type: "sea",    day: 5  },
-      { name: "At Sea",                  lat: 22.5,    lon: -73.0,    type: "sea",    day: 5  },
-      { name: "Perfect Day at CocoCay",  lat: 25.827,  lon: -77.856,  type: "port",   day: 6  },
-      { name: "At Sea",                  lat: 25.5,    lon: -79.2,    type: "sea",    day: 7  },
-      { name: "Miami, FL",               lat: 25.775,  lon: -80.190,  type: "home",   day: 8  },
+      { name: "At Sea", lat: 20.5, lon: -67.5, type: "sea" },
+      { name: "At Sea", lat: 25, lon: -72.5, type: "sea" },
+      { name: "At Sea", lat: 27.5, lon: -77, type: "sea" },
+      { name: "At Sea", lat: 26.777, lon: -77.651, type: "sea" },
+      { name: "Perfect Day at CocoCay", lat: 25.827, lon: -77.856, type: "port", day: 6 },
+      { name: "At Sea", lat: 26.4, lon: -79.3, type: "sea" },
+      { name: "Miami, FL", lat: 25.775, lon: -80.19, type: "home", day: 8 },
     ]
   },
 
@@ -400,40 +399,50 @@ const ITINERARIES = {
     ship: "Icon of the Seas",
     homePort: "Miami, FL",
     region: "Caribbean",
-    // Confirmed: Miami → CocoCay → Costa Maya → Roatan → Cozumel → Miami
     waypoints: [
-      { name: "Miami, FL",              lat: 25.775, lon: -80.190, type: "home", day: 1 },
-      { name: "At Sea",                 lat: 25.5,   lon: -78.5,  type: "sea",  day: 2 },
+      { name: "Miami, FL", lat: 25.775, lon: -80.19, type: "home", day: 1 },
+      { name: "At Sea", lat: 25.6, lon: -79, type: "sea" },
       { name: "Perfect Day at CocoCay", lat: 25.827, lon: -77.856, type: "port", day: 2 },
-      { name: "At Sea",                 lat: 22.5,   lon: -80.0,  type: "sea",  day: 3 },
-      { name: "At Sea",                 lat: 20.5,   lon: -83.5,  type: "sea",  day: 3 },
+      { name: "At Sea", lat: 24.5, lon: -79.6, type: "sea" },
+      { name: "At Sea", lat: 23.6, lon: -82.2, type: "sea" },
+      { name: "At Sea", lat: 23.017, lon: -83.724, type: "sea" },
+      { name: "At Sea", lat: 22, lon: -85, type: "sea" },
       { name: "Costa Maya (Mahahual), Mexico", lat: 18.709, lon: -87.716, type: "port", day: 4 },
-      { name: "Roatán, Honduras",       lat: 16.318, lon: -86.535, type: "port", day: 5 },
-      { name: "At Sea",                 lat: 18.0,   lon: -87.2,  type: "sea",  day: 6 },
-      { name: "Cozumel, Mexico",        lat: 20.507, lon: -86.948, type: "port", day: 6 },
-      { name: "At Sea",                 lat: 23.0,   lon: -84.5,  type: "sea",  day: 7 },
-      { name: "Miami, FL",              lat: 25.775, lon: -80.190, type: "home", day: 8 },
+      { name: "Roatán, Honduras", lat: 16.318, lon: -86.535, type: "port", day: 5 },
+      { name: "At Sea", lat: 18, lon: -86.4, type: "sea" },
+      { name: "Cozumel, Mexico", lat: 20.507, lon: -86.948, type: "port", day: 6 },
+      { name: "At Sea", lat: 22, lon: -85.5, type: "sea" },
+      { name: "At Sea", lat: 23.6, lon: -82.4, type: "sea" },
+      { name: "At Sea", lat: 24.8, lon: -80.8, type: "sea" },
+      { name: "Miami, FL", lat: 25.775, lon: -80.19, type: "home", day: 8 },
     ]
   },
 
-  // ── Enchantment of the Seas, Tampa RT ────────────────────────────────────
   ench_western7: {
     name: "Western Caribbean",
     nights: 7,
     ship: "Enchantment of the Seas",
     homePort: "Tampa, FL",
     region: "Caribbean",
-    // Confirmed: Tampa → Cozumel → Roatan → Belize City → Costa Maya → Tampa
     waypoints: [
-      { name: "Tampa, FL",              lat: 27.941, lon: -82.456, type: "home", day: 1 },
-      { name: "At Sea",                 lat: 24.0,   lon: -83.5,  type: "sea",  day: 2 },
-      { name: "At Sea",                 lat: 21.5,   lon: -84.5,  type: "sea",  day: 2 },
-      { name: "Cozumel, Mexico",        lat: 20.507, lon: -86.948, type: "port", day: 3 },
-      { name: "Roatán, Honduras",       lat: 16.318, lon: -86.535, type: "port", day: 4 },
-      { name: "Belize City, Belize",    lat: 17.251, lon: -88.767, type: "port", day: 5 },
+      { name: "Tampa, FL", lat: 27.941, lon: -82.456, type: "home", day: 1 },
+      { name: "At Sea", lat: 27.2, lon: -83.4, type: "sea" },
+      { name: "At Sea", lat: 24.5, lon: -84.6, type: "sea" },
+      { name: "At Sea", lat: 22, lon: -85.2, type: "sea" },
+      { name: "Cozumel, Mexico", lat: 20.507, lon: -86.948, type: "port", day: 3 },
+      { name: "Roatán, Honduras", lat: 16.318, lon: -86.535, type: "port", day: 4 },
+      { name: "At Sea", lat: 16.6, lon: -88, type: "sea" },
+      { name: "At Sea", lat: 19.67, lon: -86.054, type: "sea" },
+      { name: "At Sea", lat: 16.445, lon: -85.614, type: "sea" },
+      { name: "Belize City, Belize", lat: 17.251, lon: -88.767, type: "port", day: 5 },
+      { name: "At Sea", lat: 16.326, lon: -86.138, type: "sea" },
+      { name: "At Sea", lat: 18.4, lon: -88, type: "sea" },
+      { name: "At Sea", lat: 18.724, lon: -88.042, type: "sea" },
       { name: "Costa Maya (Mahahual), Mexico", lat: 18.709, lon: -87.716, type: "port", day: 6 },
-      { name: "At Sea",                 lat: 22.0,   lon: -84.5,  type: "sea",  day: 7 },
-      { name: "Tampa, FL",              lat: 27.941, lon: -82.456, type: "home", day: 8 },
+      { name: "At Sea", lat: 21, lon: -85.6, type: "sea" },
+      { name: "At Sea", lat: 24, lon: -84.2, type: "sea" },
+      { name: "At Sea", lat: 27.2, lon: -83.4, type: "sea" },
+      { name: "Tampa, FL", lat: 27.941, lon: -82.456, type: "home", day: 8 },
     ]
   },
 
@@ -443,18 +452,21 @@ const ITINERARIES = {
     ship: "Enchantment of the Seas",
     homePort: "Tampa, FL",
     region: "Caribbean",
-    // Confirmed: Tampa → Costa Maya → Cozumel → Tampa
     waypoints: [
-      { name: "Tampa, FL",              lat: 27.941, lon: -82.456, type: "home", day: 1 },
-      { name: "At Sea",                 lat: 23.0,   lon: -84.0,  type: "sea",  day: 2 },
+      { name: "Tampa, FL", lat: 27.941, lon: -82.456, type: "home", day: 1 },
+      { name: "At Sea", lat: 27, lon: -83.5, type: "sea" },
+      { name: "At Sea", lat: 23, lon: -85.4, type: "sea" },
+      { name: "At Sea", lat: 21, lon: -86.2, type: "sea" },
       { name: "Costa Maya (Mahahual), Mexico", lat: 18.709, lon: -87.716, type: "port", day: 3 },
-      { name: "Cozumel, Mexico",        lat: 20.507, lon: -86.948, type: "port", day: 4 },
-      { name: "At Sea",                 lat: 23.5,   lon: -84.0,  type: "sea",  day: 5 },
-      { name: "Tampa, FL",              lat: 27.941, lon: -82.456, type: "home", day: 6 },
+      { name: "At Sea", lat: 19.8, lon: -86.9, type: "sea" },
+      { name: "At Sea", lat: 20.137, lon: -87.173, type: "sea" },
+      { name: "Cozumel, Mexico", lat: 20.507, lon: -86.948, type: "port", day: 4 },
+      { name: "At Sea", lat: 23, lon: -85, type: "sea" },
+      { name: "At Sea", lat: 27, lon: -83.5, type: "sea" },
+      { name: "Tampa, FL", lat: 27.941, lon: -82.456, type: "home", day: 6 },
     ]
   },
 
-  // ── Utopia of the Seas, Port Canaveral RT ────────────────────────────────
   utopia_bahamas: {
     name: "Bahamas & Perfect Day",
     nights: 3,
@@ -463,13 +475,17 @@ const ITINERARIES = {
     region: "Caribbean",
     waypoints: [
       { name: "Port Canaveral (Orlando), FL", lat: 28.415, lon: -80.621, type: "home", day: 1 },
-      { name: "Perfect Day at CocoCay",  lat: 25.827, lon: -77.856, type: "port", day: 2 },
-      { name: "Nassau, Bahamas",         lat: 25.048, lon: -77.353, type: "port", day: 3 },
+      { name: "At Sea", lat: 27.4, lon: -79.2, type: "sea" },
+      { name: "At Sea", lat: 26.776, lon: -78.338, type: "sea" },
+      { name: "Perfect Day at CocoCay", lat: 25.827, lon: -77.856, type: "port", day: 2 },
+      { name: "At Sea", lat: 25.4, lon: -77.55, type: "sea" },
+      { name: "Nassau, Bahamas", lat: 25.048, lon: -77.353, type: "port", day: 3 },
+      { name: "At Sea", lat: 26, lon: -78.6, type: "sea" },
+      { name: "At Sea", lat: 27.8, lon: -79.7, type: "sea" },
       { name: "Port Canaveral (Orlando), FL", lat: 28.415, lon: -80.621, type: "home", day: 4 },
     ]
   },
 
-  // ── Oasis of the Seas, Port Canaveral RT ─────────────────────────────────
   oasis_bahamas: {
     name: "Bahamas",
     nights: 5,
@@ -478,187 +494,290 @@ const ITINERARIES = {
     region: "Caribbean",
     waypoints: [
       { name: "Port Canaveral (Orlando), FL", lat: 28.415, lon: -80.621, type: "home", day: 1 },
-      { name: "At Sea",                  lat: 27.0,   lon: -79.5,  type: "sea",  day: 2 },
-      { name: "Nassau, Bahamas",         lat: 25.048, lon: -77.353, type: "port", day: 2 },
-      { name: "Perfect Day at CocoCay",  lat: 25.827, lon: -77.856, type: "port", day: 3 },
-      { name: "At Sea",                  lat: 27.0,   lon: -79.5,  type: "sea",  day: 4 },
-      { name: "Nassau, Bahamas",         lat: 25.048, lon: -77.353, type: "port", day: 4 },
-      { name: "At Sea",                  lat: 27.2,   lon: -80.0,  type: "sea",  day: 5 },
+      { name: "At Sea", lat: 27.3, lon: -79.1, type: "sea" },
+      { name: "At Sea", lat: 26.695, lon: -77.555, type: "sea" },
+      { name: "Nassau, Bahamas", lat: 25.048, lon: -77.353, type: "port", day: 2 },
+      { name: "At Sea", lat: 25.5, lon: -77.6, type: "sea" },
+      { name: "Perfect Day at CocoCay", lat: 25.827, lon: -77.856, type: "port", day: 3 },
+      { name: "At Sea", lat: 26.2, lon: -78.3, type: "sea" },
+      { name: "At Sea", lat: 26.6, lon: -78, type: "sea" },
+      { name: "Nassau, Bahamas", lat: 25.048, lon: -77.353, type: "port", day: 4 },
+      { name: "At Sea", lat: 26.5, lon: -78.8, type: "sea" },
+      { name: "At Sea", lat: 27.9, lon: -79.8, type: "sea" },
       { name: "Port Canaveral (Orlando), FL", lat: 28.415, lon: -80.621, type: "home", day: 6 },
     ]
   },
 
-  // ── Radiance of the Seas, San Juan RT ────────────────────────────────────
   radiance_southern: {
     name: "Southern Caribbean",
     nights: 7,
     ship: "Radiance of the Seas",
     homePort: "San Juan, Puerto Rico",
     region: "Caribbean_South",
-    // Confirmed 2026: San Juan → Antigua → St. Lucia → Barbados → St. Kitts → St. Maarten → San Juan
     waypoints: [
-      { name: "San Juan, Puerto Rico",   lat: 18.466, lon: -66.118, type: "home", day: 1 },
-      { name: "At Sea",                  lat: 17.5,   lon: -63.8,  type: "sea",  day: 2 },
-      { name: "St. John's, Antigua",     lat: 17.127, lon: -61.847, type: "port", day: 2 },
-      { name: "Castries, St. Lucia",     lat: 13.999, lon: -61.005, type: "port", day: 3 },
-      { name: "Bridgetown, Barbados",    lat: 13.097, lon: -59.614, type: "port", day: 4 },
-      { name: "At Sea",                  lat: 15.0,   lon: -61.5,  type: "sea",  day: 5 },
-      { name: "Basseterre, St. Kitts",   lat: 17.304, lon: -62.717, type: "port", day: 5 },
-      { name: "Philipsburg, St. Maarten",lat: 18.015, lon: -63.047, type: "port", day: 6 },
-      { name: "At Sea",                  lat: 18.3,   lon: -64.5,  type: "sea",  day: 7 },
-      { name: "San Juan, Puerto Rico",   lat: 18.466, lon: -66.118, type: "home", day: 8 },
+      { name: "San Juan, Puerto Rico", lat: 18.466, lon: -66.118, type: "home", day: 1 },
+      { name: "At Sea", lat: 18.8, lon: -65, type: "sea" },
+      { name: "At Sea", lat: 18.3, lon: -63.2, type: "sea" },
+      { name: "St. John's, Antigua", lat: 17.127, lon: -61.847, type: "port", day: 2 },
+      { name: "At Sea", lat: 16.4, lon: -61.95, type: "sea" },
+      { name: "At Sea", lat: 15.4, lon: -61.62, type: "sea" },
+      { name: "At Sea", lat: 14.7, lon: -61.28, type: "sea" },
+      { name: "Castries, St. Lucia", lat: 13.999, lon: -61.005, type: "port", day: 3 },
+      { name: "At Sea", lat: 13.3, lon: -60, type: "sea" },
+      { name: "Bridgetown, Barbados", lat: 13.097, lon: -59.614, type: "port", day: 4 },
+      { name: "At Sea", lat: 13.9, lon: -60.6, type: "sea" },
+      { name: "At Sea", lat: 14.619, lon: -61.338, type: "sea" },
+      { name: "At Sea", lat: 15.6, lon: -61.65, type: "sea" },
+      { name: "At Sea", lat: 16.9, lon: -62.4, type: "sea" },
+      { name: "At Sea", lat: 16.948, lon: -62.755, type: "sea" },
+      { name: "Basseterre, St. Kitts", lat: 17.304, lon: -62.717, type: "port", day: 5 },
+      { name: "At Sea", lat: 17.75, lon: -63.15, type: "sea" },
+      { name: "Philipsburg, St. Maarten", lat: 18.015, lon: -63.047, type: "port", day: 6 },
+      { name: "At Sea", lat: 18.7, lon: -64.4, type: "sea" },
+      { name: "At Sea", lat: 18.85, lon: -65.6, type: "sea" },
+      { name: "San Juan, Puerto Rico", lat: 18.466, lon: -66.118, type: "home", day: 8 },
     ]
   },
 
-  // ── Harmony of the Seas, Barcelona RT ────────────────────────────────────
   harmony_wmed: {
     name: "Western Mediterranean",
     nights: 7,
     ship: "Harmony of the Seas",
     homePort: "Barcelona, Spain",
     region: "Mediterranean",
-    // Confirmed: Barcelona → Palma de Mallorca → Florence/La Spezia → Rome/Civitavecchia → Naples → Barcelona
     waypoints: [
-      { name: "Barcelona, Spain",        lat: 41.385, lon:  2.173,  type: "home", day: 1 },
-      { name: "Palma de Mallorca, Spain",lat: 39.569, lon:  2.650,  type: "port", day: 2 },
-      { name: "At Sea",                  lat: 40.5,   lon:  5.5,   type: "sea",  day: 3 },
+      { name: "Barcelona, Spain", lat: 41.385, lon: 2.173, type: "home", day: 1 },
+      { name: "At Sea", lat: 40.1, lon: 2.95, type: "sea" },
+      { name: "At Sea", lat: 40.08, lon: 2.365, type: "sea" },
+      { name: "Palma de Mallorca, Spain", lat: 39.569, lon: 2.65, type: "port", day: 2 },
+      { name: "At Sea", lat: 40.473, lon: 2.418, type: "sea" },
+      { name: "At Sea", lat: 40.05, lon: 3.25, type: "sea" },
+      { name: "At Sea", lat: 40.75, lon: 4.9, type: "sea" },
+      { name: "At Sea", lat: 42.6, lon: 7.4, type: "sea" },
+      { name: "At Sea", lat: 43.65, lon: 8.8, type: "sea" },
       { name: "Florence/Pisa (La Spezia), Italy", lat: 44.105, lon: 9.823, type: "port", day: 3 },
+      { name: "At Sea", lat: 43.3, lon: 9.95, type: "sea" },
+      { name: "At Sea", lat: 42.69, lon: 10.133, type: "sea" },
+      { name: "At Sea", lat: 42.4, lon: 10.7, type: "sea" },
       { name: "Rome (Civitavecchia), Italy", lat: 42.094, lon: 11.799, type: "port", day: 4 },
-      { name: "Naples/Capri, Italy",     lat: 40.853, lon: 14.268,  type: "port", day: 5 },
-      { name: "At Sea",                  lat: 39.5,   lon: 10.0,   type: "sea",  day: 6 },
-      { name: "At Sea",                  lat: 40.0,   lon:  6.0,   type: "sea",  day: 6 },
-      { name: "At Sea",                  lat: 40.8,   lon:  3.5,   type: "sea",  day: 7 },
-      { name: "Barcelona, Spain",        lat: 41.385, lon:  2.173,  type: "home", day: 8 },
+      { name: "At Sea", lat: 41.05, lon: 12.55, type: "sea" },
+      { name: "At Sea", lat: 40.107, lon: 13.312, type: "sea" },
+      { name: "Naples/Capri, Italy", lat: 40.853, lon: 14.268, type: "port", day: 5 },
+      { name: "At Sea", lat: 39, lon: 12.9, type: "sea" },
+      { name: "At Sea", lat: 38.6, lon: 9, type: "sea" },
+      { name: "At Sea", lat: 39.6, lon: 5, type: "sea" },
+      { name: "At Sea", lat: 40.6, lon: 3.4, type: "sea" },
+      { name: "Barcelona, Spain", lat: 41.385, lon: 2.173, type: "home", day: 8 },
     ]
   },
 
-  // ── Odyssey of the Seas, Rome RT ─────────────────────────────────────────
   odyssey_greek: {
     name: "Greek Isles & Italy",
     nights: 7,
     ship: "Odyssey of the Seas",
     homePort: "Rome (Civitavecchia), Italy",
     region: "Mediterranean",
-    // Confirmed: Civitavecchia → Naples → Santorini → Mykonos → Athens (Piraeus) → Civitavecchia
     waypoints: [
       { name: "Rome (Civitavecchia), Italy", lat: 42.094, lon: 11.799, type: "home", day: 1 },
-      { name: "Naples, Italy",           lat: 40.853, lon: 14.268,  type: "port", day: 2 },
-      { name: "At Sea",                  lat: 38.0,   lon: 17.0,   type: "sea",  day: 3 },
-      { name: "Santorini, Greece",       lat: 36.461, lon: 25.376,  type: "port", day: 3 },
-      { name: "Mykonos, Greece",         lat: 37.444, lon: 25.329,  type: "port", day: 4 },
-      { name: "Athens (Piraeus), Greece",lat: 37.943, lon: 23.648,  type: "port", day: 5 },
-      { name: "At Sea",                  lat: 38.5,   lon: 20.0,   type: "sea",  day: 6 },
-      { name: "At Sea",                  lat: 39.5,   lon: 15.0,   type: "sea",  day: 7 },
+      { name: "At Sea", lat: 41.05, lon: 12.55, type: "sea" },
+      { name: "At Sea", lat: 40.107, lon: 13.312, type: "sea" },
+      { name: "Naples, Italy", lat: 40.853, lon: 14.268, type: "port", day: 2 },
+      { name: "At Sea", lat: 38.8, lon: 14.2, type: "sea" },
+      { name: "At Sea", lat: 38.742, lon: 12.656, type: "sea" },
+      { name: "At Sea", lat: 37.3, lon: 12.1, type: "sea" },
+      { name: "At Sea", lat: 36.1, lon: 13.2, type: "sea" },
+      { name: "At Sea", lat: 36.2, lon: 15.616, type: "sea" },
+      { name: "At Sea", lat: 35.8, lon: 18, type: "sea" },
+      { name: "At Sea", lat: 35.6, lon: 22, type: "sea" },
+      { name: "At Sea", lat: 36, lon: 24.4, type: "sea" },
+      { name: "Santorini, Greece", lat: 36.461, lon: 25.376, type: "port", day: 3 },
+      { name: "At Sea", lat: 36.653, lon: 25.05, type: "sea" },
+      { name: "At Sea", lat: 37, lon: 25.2, type: "sea" },
+      { name: "Mykonos, Greece", lat: 37.444, lon: 25.329, type: "port", day: 4 },
+      { name: "At Sea", lat: 37.75, lon: 24.35, type: "sea" },
+      { name: "At Sea", lat: 37.605, lon: 23.933, type: "sea" },
+      { name: "Athens (Piraeus), Greece", lat: 37.943, lon: 23.648, type: "port", day: 5 },
+      { name: "At Sea", lat: 37.404, lon: 23.645, type: "sea" },
+      { name: "At Sea", lat: 37.1, lon: 23.2, type: "sea" },
+      { name: "At Sea", lat: 35.001, lon: 23.25, type: "sea" },
+      { name: "At Sea", lat: 36.3, lon: 21.6, type: "sea" },
+      { name: "At Sea", lat: 37, lon: 18, type: "sea" },
+      { name: "At Sea", lat: 36.3, lon: 15.8, type: "sea" },
+      { name: "At Sea", lat: 36.2, lon: 12.5, type: "sea" },
+      { name: "At Sea", lat: 38.6, lon: 11.4, type: "sea" },
+      { name: "At Sea", lat: 40.6, lon: 11.7, type: "sea" },
       { name: "Rome (Civitavecchia), Italy", lat: 42.094, lon: 11.799, type: "home", day: 8 },
     ]
   },
 
-  // ── Voyager of the Seas, Seattle RT ──────────────────────────────────────
   voyager_alaska: {
     name: "Alaska Adventure",
     nights: 7,
     ship: "Voyager of the Seas",
     homePort: "Seattle, WA",
     region: "Alaska",
-    // Confirmed June 2026: Seattle → At Sea → Juneau → Skagway → Dawes Glacier (scenic) → At Sea → Victoria → Seattle
     waypoints: [
-      { name: "Seattle, WA",             lat: 47.607, lon: -122.332, type: "home",   day: 1 },
-      { name: "At Sea (Inside Passage)", lat: 50.5,   lon: -126.5,  type: "sea",    day: 2 },
-      { name: "At Sea (Inside Passage)", lat: 53.5,   lon: -130.0,  type: "sea",    day: 2 },
-      { name: "Juneau, AK",              lat: 58.301, lon: -134.420, type: "port",   day: 3 },
-      { name: "Skagway, AK",             lat: 59.458, lon: -135.315, type: "port",   day: 4 },
-      { name: "Endicott Arm & Dawes Glacier (Scenic Cruising)", lat: 57.5, lon: -133.0, type: "scenic", day: 5 },
-      { name: "At Sea (Inside Passage)", lat: 54.0,   lon: -130.5,  type: "sea",    day: 6 },
-      { name: "At Sea (Inside Passage)", lat: 50.5,   lon: -126.5,  type: "sea",    day: 6 },
-      { name: "Victoria, BC",            lat: 48.428, lon: -123.365, type: "port",   day: 7 },
-      { name: "Seattle, WA",             lat: 47.607, lon: -122.332, type: "home",   day: 8 },
+      { name: "Seattle, WA", lat: 47.607, lon: -122.332, type: "home", day: 1 },
+      { name: "At Sea", lat: 48.15, lon: -122.74, type: "sea" },
+      { name: "At Sea", lat: 48.25, lon: -124, type: "sea" },
+      { name: "At Sea", lat: 48.4, lon: -125.2, type: "sea" },
+      { name: "At Sea", lat: 50.8, lon: -129.6, type: "sea" },
+      { name: "At Sea", lat: 53.2, lon: -133.6, type: "sea" },
+      { name: "At Sea", lat: 54.6, lon: -133.6, type: "sea" },
+      { name: "At Sea", lat: 54.7, lon: -132, type: "sea" },
+      { name: "At Sea", lat: 55.6, lon: -133.3, type: "sea" },
+      { name: "Juneau, AK", lat: 58.301, lon: -134.42, type: "port", day: 3 },
+      { name: "At Sea", lat: 58.55, lon: -134.95, type: "sea" },
+      { name: "Skagway, AK", lat: 59.458, lon: -135.315, type: "port", day: 4 },
+      { name: "At Sea", lat: 58.4, lon: -134.6, type: "sea" },
+      { name: "Endicott Arm & Dawes Glacier (Scenic Cruising)", lat: 57.5, lon: -133.2, type: "scenic", day: 5 },
+      { name: "At Sea", lat: 57.2, lon: -134, type: "sea" },
+      { name: "At Sea", lat: 55.7, lon: -133.2, type: "sea" },
+      { name: "At Sea", lat: 53, lon: -133.4, type: "sea" },
+      { name: "At Sea", lat: 50.6, lon: -129.2, type: "sea" },
+      { name: "At Sea", lat: 48.4, lon: -125.2, type: "sea" },
+      { name: "At Sea", lat: 48.25, lon: -124, type: "sea" },
+      { name: "At Sea", lat: 48.098, lon: -123.615, type: "sea" },
+      { name: "Victoria, BC", lat: 48.428, lon: -123.365, type: "port", day: 7 },
+      { name: "At Sea", lat: 48.2, lon: -123, type: "sea" },
+      { name: "Seattle, WA", lat: 47.607, lon: -122.332, type: "home", day: 8 },
     ]
   },
 
-  // ── Ovation of the Seas, Vancouver → Seward ───────────────────────────────
   ovation_north: {
     name: "Alaska Northbound (Hubbard Glacier)",
     nights: 7,
     ship: "Ovation of the Seas",
     homePort: "Vancouver, BC → Seward, AK",
     region: "Alaska",
-    // Confirmed: Vancouver → Ketchikan (Ward Cove) → Sitka → Skagway → Hubbard Glacier → Seward
     waypoints: [
-      { name: "Vancouver, BC",           lat: 49.285, lon: -123.121, type: "home",   day: 1 },
-      { name: "At Sea (Inside Passage)", lat: 51.5,   lon: -127.0,  type: "sea",    day: 2 },
-      { name: "At Sea (Inside Passage)", lat: 53.5,   lon: -130.5,  type: "sea",    day: 2 },
+      { name: "Vancouver, BC", lat: 49.285, lon: -123.121, type: "home", day: 1 },
+      { name: "At Sea", lat: 49.1, lon: -123.5, type: "sea" },
+      { name: "At Sea", lat: 49.9, lon: -124.8, type: "sea" },
+      { name: "At Sea", lat: 47.01, lon: -127.411, type: "sea" },
+      { name: "At Sea", lat: 50.9, lon: -127.6, type: "sea" },
+      { name: "At Sea", lat: 51.5, lon: -129, type: "sea" },
+      { name: "At Sea", lat: 50.156, lon: -132.09, type: "sea" },
+      { name: "At Sea", lat: 51.389, lon: -135.868, type: "sea" },
+      { name: "At Sea", lat: 53.5, lon: -132.5, type: "sea" },
+      { name: "At Sea", lat: 53.063, lon: -134.696, type: "sea" },
+      { name: "At Sea", lat: 54.997, lon: -135.823, type: "sea" },
+      { name: "At Sea", lat: 54.6, lon: -132.2, type: "sea" },
       { name: "Ketchikan (Ward Cove), AK", lat: 55.342, lon: -131.648, type: "port", day: 3 },
-      { name: "Sitka, AK",               lat: 57.053, lon: -135.330, type: "port",   day: 4 },
-      { name: "Skagway, AK",             lat: 59.458, lon: -135.315, type: "port",   day: 5 },
-      { name: "Hubbard Glacier (Scenic Cruising)", lat: 60.0, lon: -139.5, type: "scenic", day: 6 },
-      { name: "At Sea",                  lat: 59.5,   lon: -145.5,  type: "sea",    day: 7 },
-      { name: "Seward, AK",              lat: 60.104, lon: -149.444, type: "home",   day: 8 },
+      { name: "At Sea", lat: 55.6, lon: -133, type: "sea" },
+      { name: "Sitka, AK", lat: 57.053, lon: -135.33, type: "port", day: 4 },
+      { name: "At Sea", lat: 57.6, lon: -135.6, type: "sea" },
+      { name: "At Sea", lat: 58, lon: -136.5, type: "sea" },
+      { name: "At Sea", lat: 58.25, lon: -135.6, type: "sea" },
+      { name: "Skagway, AK", lat: 59.458, lon: -135.315, type: "port", day: 5 },
+      { name: "At Sea", lat: 58.6, lon: -135.5, type: "sea" },
+      { name: "At Sea", lat: 58.3, lon: -136.7, type: "sea" },
+      { name: "Hubbard Glacier (Scenic Cruising)", lat: 60, lon: -139.5, type: "scenic", day: 6 },
+      { name: "At Sea", lat: 59.7, lon: -143, type: "sea" },
+      { name: "At Sea", lat: 59.6, lon: -147, type: "sea" },
+      { name: "Seward, AK", lat: 60.104, lon: -149.444, type: "home", day: 8 },
     ]
   },
 
-  // ── Ovation of the Seas, Seward → Vancouver ──────────────────────────────
   ovation_south: {
     name: "Alaska Southbound (Hubbard Glacier)",
     nights: 7,
     ship: "Ovation of the Seas",
     homePort: "Seward, AK → Vancouver, BC",
     region: "Alaska",
-    // Confirmed: Seward → Hubbard Glacier → Juneau → Skagway → Icy Strait Point → Vancouver
     waypoints: [
-      { name: "Seward, AK",              lat: 60.104, lon: -149.444, type: "home",   day: 1 },
-      { name: "At Sea",                  lat: 59.5,   lon: -145.5,  type: "sea",    day: 2 },
-      { name: "Hubbard Glacier (Scenic Cruising)", lat: 60.0, lon: -139.5, type: "scenic", day: 2 },
-      { name: "Juneau, AK",              lat: 58.301, lon: -134.420, type: "port",   day: 3 },
-      { name: "Skagway, AK",             lat: 59.458, lon: -135.315, type: "port",   day: 4 },
-      { name: "Icy Strait Point, AK",    lat: 58.137, lon: -135.455, type: "port",   day: 5 },
-      { name: "At Sea (Inside Passage)", lat: 55.0,   lon: -131.5,  type: "sea",    day: 6 },
-      { name: "At Sea (Inside Passage)", lat: 52.0,   lon: -128.0,  type: "sea",    day: 6 },
-      { name: "Vancouver, BC",           lat: 49.285, lon: -123.121, type: "home",   day: 8 },
+      { name: "Seward, AK", lat: 60.104, lon: -149.444, type: "home", day: 1 },
+      { name: "At Sea", lat: 59.6, lon: -147, type: "sea" },
+      { name: "At Sea", lat: 59.7, lon: -142, type: "sea" },
+      { name: "Hubbard Glacier (Scenic Cruising)", lat: 60, lon: -139.5, type: "scenic", day: 2 },
+      { name: "At Sea", lat: 58.6, lon: -137.5, type: "sea" },
+      { name: "At Sea", lat: 58.2, lon: -136, type: "sea" },
+      { name: "Juneau, AK", lat: 58.301, lon: -134.42, type: "port", day: 3 },
+      { name: "At Sea", lat: 58.55, lon: -134.95, type: "sea" },
+      { name: "Skagway, AK", lat: 59.458, lon: -135.315, type: "port", day: 4 },
+      { name: "At Sea", lat: 58.3, lon: -135.4, type: "sea" },
+      { name: "Icy Strait Point, AK", lat: 58.137, lon: -135.455, type: "port", day: 5 },
+      { name: "At Sea", lat: 57.6, lon: -135.5, type: "sea" },
+      { name: "At Sea", lat: 56.5, lon: -134.5, type: "sea" },
+      { name: "At Sea", lat: 55, lon: -133.3, type: "sea" },
+      { name: "At Sea", lat: 53.447, lon: -134.672, type: "sea" },
+      { name: "At Sea", lat: 53.5, lon: -132.6, type: "sea" },
+      { name: "At Sea", lat: 51.328, lon: -134.419, type: "sea" },
+      { name: "At Sea", lat: 49.299, lon: -132.441, type: "sea" },
+      { name: "At Sea", lat: 51.4, lon: -128.8, type: "sea" },
+      { name: "At Sea", lat: 50.7, lon: -127.4, type: "sea" },
+      { name: "At Sea", lat: 52.002, lon: -130.523, type: "sea" },
+      { name: "At Sea", lat: 48.642, lon: -130.921, type: "sea" },
+      { name: "At Sea", lat: 46.871, lon: -127.247, type: "sea" },
+      { name: "At Sea", lat: 49.9, lon: -124.9, type: "sea" },
+      { name: "At Sea", lat: 49.356, lon: -124.092, type: "sea" },
+      { name: "Vancouver, BC", lat: 49.285, lon: -123.121, type: "home", day: 8 },
     ]
   },
 
-  // ── Serenade of the Seas, Vancouver RT ───────────────────────────────────
   serenade_alaska: {
     name: "Alaska Inside Passage",
     nights: 7,
     ship: "Serenade of the Seas",
     homePort: "Vancouver, BC",
     region: "Alaska",
-    // Confirmed: Vancouver → Sitka → Juneau → Icy Strait Point → Ketchikan → Victoria → Vancouver
     waypoints: [
-      { name: "Vancouver, BC",           lat: 49.285, lon: -123.121, type: "home",   day: 1 },
-      { name: "At Sea (Inside Passage)", lat: 52.5,   lon: -128.5,  type: "sea",    day: 2 },
-      { name: "At Sea (Inside Passage)", lat: 55.0,   lon: -131.0,  type: "sea",    day: 2 },
-      { name: "Sitka, AK",               lat: 57.053, lon: -135.330, type: "port",   day: 3 },
-      { name: "Juneau, AK",              lat: 58.301, lon: -134.420, type: "port",   day: 4 },
-      { name: "Icy Strait Point, AK",    lat: 58.137, lon: -135.455, type: "port",   day: 5 },
-      { name: "Ketchikan, AK",           lat: 55.342, lon: -131.648, type: "port",   day: 6 },
-      { name: "Victoria, BC",            lat: 48.428, lon: -123.365, type: "port",   day: 7 },
-      { name: "Vancouver, BC",           lat: 49.285, lon: -123.121, type: "home",   day: 8 },
+      { name: "Vancouver, BC", lat: 49.285, lon: -123.121, type: "home", day: 1 },
+      { name: "At Sea", lat: 49.1, lon: -123.6, type: "sea" },
+      { name: "At Sea", lat: 49.9, lon: -124.9, type: "sea" },
+      { name: "At Sea", lat: 48.61, lon: -122.425, type: "sea" },
+      { name: "At Sea", lat: 46.048, lon: -123.53, type: "sea" },
+      { name: "At Sea", lat: 47.024, lon: -127.5, type: "sea" },
+      { name: "At Sea", lat: 50.9, lon: -127.6, type: "sea" },
+      { name: "At Sea", lat: 51.6, lon: -129.2, type: "sea" },
+      { name: "At Sea", lat: 52.062, lon: -131.722, type: "sea" },
+      { name: "At Sea", lat: 54, lon: -133.4, type: "sea" },
+      { name: "At Sea", lat: 56, lon: -135.5, type: "sea" },
+      { name: "Sitka, AK", lat: 57.053, lon: -135.33, type: "port", day: 3 },
+      { name: "At Sea", lat: 57.6, lon: -135.7, type: "sea" },
+      { name: "At Sea", lat: 58, lon: -136.4, type: "sea" },
+      { name: "At Sea", lat: 58.25, lon: -135.7, type: "sea" },
+      { name: "Juneau, AK", lat: 58.301, lon: -134.42, type: "port", day: 4 },
+      { name: "At Sea", lat: 58.2, lon: -135, type: "sea" },
+      { name: "Icy Strait Point, AK", lat: 58.137, lon: -135.455, type: "port", day: 5 },
+      { name: "At Sea", lat: 57.6, lon: -135.6, type: "sea" },
+      { name: "At Sea", lat: 56, lon: -134.5, type: "sea" },
+      { name: "At Sea", lat: 55.5, lon: -133.2, type: "sea" },
+      { name: "Ketchikan, AK", lat: 55.342, lon: -131.648, type: "port", day: 6 },
+      { name: "At Sea", lat: 54.6, lon: -132.2, type: "sea" },
+      { name: "At Sea", lat: 53.707, lon: -131.156, type: "sea" },
+      { name: "At Sea", lat: 52.5, lon: -130.5, type: "sea" },
+      { name: "At Sea", lat: 50.6, lon: -128.8, type: "sea" },
+      { name: "At Sea", lat: 48.7, lon: -125.3, type: "sea" },
+      { name: "At Sea", lat: 48.25, lon: -124.2, type: "sea" },
+      { name: "At Sea", lat: 48.094, lon: -123.73, type: "sea" },
+      { name: "Victoria, BC", lat: 48.428, lon: -123.365, type: "port", day: 7 },
+      { name: "At Sea", lat: 48.2, lon: -123.1, type: "sea" },
+      { name: "Vancouver, BC", lat: 49.285, lon: -123.121, type: "home", day: 8 },
     ]
   },
 
-  // ── Odyssey of the Seas, Cape Liberty, NJ RT ─────────────────────────────
   odyssey_bermuda: {
     name: "Bermuda",
     nights: 7,
     ship: "Odyssey of the Seas",
     homePort: "Cape Liberty (Bayonne), NJ",
     region: "Atlantic",
-    // Confirmed: Cape Liberty → King's Wharf (3 nights) → St. George's → Cape Liberty
     waypoints: [
       { name: "Cape Liberty (Bayonne), NJ", lat: 40.665, lon: -74.129, type: "home", day: 1 },
-      { name: "At Sea",                  lat: 37.5,   lon: -72.0,  type: "sea",  day: 2 },
-      { name: "At Sea",                  lat: 34.5,   lon: -67.5,  type: "sea",  day: 2 },
-      { name: "King's Wharf, Bermuda",   lat: 32.328, lon: -64.838, type: "port", day: 3 },
-      { name: "St. George's, Bermuda",   lat: 32.381, lon: -64.678, type: "port", day: 5 },
-      { name: "At Sea",                  lat: 34.5,   lon: -67.5,  type: "sea",  day: 6 },
-      { name: "At Sea",                  lat: 37.5,   lon: -72.0,  type: "sea",  day: 7 },
+      { name: "At Sea", lat: 40.3, lon: -73.6, type: "sea" },
+      { name: "At Sea", lat: 37, lon: -69.5, type: "sea" },
+      { name: "King's Wharf, Bermuda", lat: 32.328, lon: -64.838, type: "port", day: 3 },
+      { name: "At Sea", lat: 32.25, lon: -64.6, type: "sea" },
+      { name: "St. George's, Bermuda", lat: 32.381, lon: -64.678, type: "port", day: 5 },
+      { name: "At Sea", lat: 34.5, lon: -67, type: "sea" },
+      { name: "At Sea", lat: 38, lon: -71.5, type: "sea" },
+      { name: "At Sea", lat: 40.3, lon: -73.6, type: "sea" },
       { name: "Cape Liberty (Bayonne), NJ", lat: 40.665, lon: -74.129, type: "home", day: 8 },
     ]
   },
 
-};
+};;
 
 // ─── Region view bounds (lon0, lat0, lon1, lat1) ─────────────────────────────
 const REGION_BOUNDS = {
@@ -721,8 +840,8 @@ const MAP_CSS = `
 
 // ─── Pre-load world data ──────────────────────────────────────────────────────
 async function loadWorld() {
-  // 50m resolution gives far more coastline detail (and reveals small Caribbean
-  // islands) than 110m. Fall back to 110m if the larger file fails to load.
+  // 50m balances coastline detail with correct geometry. (The 10m build has
+  // reversed polygon winding that breaks rendering/containment, so it's avoided.)
   const sources = [
     'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-50m.json',
     'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json',
@@ -976,9 +1095,10 @@ function buildRouteAndMarkers(overlay, projection, itin, L) {
 function computeLayout(W, H, shape) {
   const S = Math.min(W, H);
   const L = { shape, W, H, cx: W/2 };
-  L.wheelR       = shape === 'rect' ? 40 : S*0.075;
+  L.wheelR       = shape === 'rect' ? 38 : S*0.072;
+  L.handleR      = L.wheelR * 1.34;            // outer reach of the wheel's handle knobs
   L.shipF        = shape === 'rect' ? 22 : S/27;
-  L.bannerW      = shape === 'circle' ? Math.min(W*0.64, 300) : Math.min(W*0.5, 430);
+  L.bannerW      = shape === 'circle' ? Math.min(W*0.66, 320) : Math.min(W*0.52, 440);
   L.bannerH      = shape === 'rect' ? 46 : S*0.078;
   L.bannerTitleF = shape === 'rect' ? 15 : S/42;
   L.bannerDateF  = L.bannerTitleF*0.82;
@@ -990,23 +1110,22 @@ function computeLayout(W, H, shape) {
     const ring = 26;
     L.ring = ring; L.cy = H/2; L.R = W/2 - ring;
     const top = L.cy - L.R;
-    L.wheelCY  = top + 16 + L.wheelR;
-    L.shipY    = L.wheelCY + L.wheelR + L.shipF*1.05;
+    L.wheelCY   = top + 16 + L.handleR;
+    L.shipY     = L.wheelCY + L.handleR + L.shipF*1.05;
     L.bannerTop = L.shipY + 8;
-    const headerBottom = L.bannerTop + L.bannerH + 10;
-    const yTop = headerBottom;
-    const yBot = L.cy + L.R - 64;
-    const hwTop = Math.sqrt(Math.max(0, L.R*L.R - (yTop-L.cy)**2));
-    const hwBot = Math.sqrt(Math.max(0, L.R*L.R - (yBot-L.cy)**2));
-    const hw = Math.min(hwTop, hwBot) - 10;
+    const headerBottom = L.bannerTop + L.bannerH + 12;
+    const yTop = headerBottom, yBot = L.cy + L.R - 60;
+    const hw = Math.min(Math.sqrt(Math.max(0, L.R*L.R-(yTop-L.cy)**2)), Math.sqrt(Math.max(0, L.R*L.R-(yBot-L.cy)**2))) - 12;
     L.map = { x: L.cx - hw, y: yTop, w: hw*2, h: yBot - yTop };
+    L.interior = { x: L.cx - L.R + 2, y: L.cy - L.R + 2, w: 2*(L.R-2), h: 2*(L.R-2) };
     L.compass = { cx: L.cx, cy: L.cy + L.R - 30, r: 20 };
     L.showLegend = false;
   } else {
-    const m = shape === 'square' ? 22 : 14, innerPad = 12, topPad = shape === 'square' ? 18 : 14;
+    const m = shape === 'square' ? 22 : 14, edge = 8, innerPad = 12, topGap = 16;
     L.m = m;
-    L.wheelCY  = m + topPad + L.wheelR;
-    L.shipY    = L.wheelCY + L.wheelR + L.shipF*1.05;
+    L.interior = { x: m + edge, y: m + edge, w: W - 2*(m+edge), h: H - 2*(m+edge) };
+    L.wheelCY   = m + topGap + L.handleR;
+    L.shipY     = L.wheelCY + L.handleR + L.shipF*1.05;
     L.bannerTop = L.shipY + 8;
     const mapTop = L.bannerTop + L.bannerH + 14;
     L.map = { x: m + innerPad, y: mapTop, w: W - 2*(m+innerPad), h: H - mapTop - (m+innerPad) };
@@ -1029,18 +1148,22 @@ function composeChart(svgSel, opts) {
   glow.append('feGaussianBlur').attr('stdDeviation', L.routeW*0.7).attr('result', 'b');
   const fm = glow.append('feMerge'); fm.append('feMergeNode').attr('in', 'b'); fm.append('feMergeNode').attr('in', 'SourceGraphic');
 
+  // The map fills the whole interior (behind the header too) so there's no blank
+  // box at the top; the route itself is still fit to the area below the header.
   const clip = defs.append('clipPath').attr('id', 'mapClip');
   if (shape === 'circle') clip.append('circle').attr('cx', L.cx).attr('cy', L.cy).attr('r', L.R - 2);
-  else clip.append('rect').attr('x', L.map.x).attr('y', L.map.y).attr('width', L.map.w).attr('height', L.map.h).attr('rx', 4);
+  else clip.append('rect').attr('x', L.interior.x).attr('y', L.interior.y).attr('width', L.interior.w).attr('height', L.interior.h).attr('rx', 5);
 
   svgSel.append('rect').attr('class', 'chart-bg').attr('width', W).attr('height', H);
   if (shape === 'circle') svgSel.append('circle').attr('class', 'water').attr('cx', L.cx).attr('cy', L.cy).attr('r', L.R - 2);
-  else svgSel.append('rect').attr('class', 'water').attr('x', L.map.x).attr('y', L.map.y).attr('width', L.map.w).attr('height', L.map.h).attr('rx', 4);
+  else svgSel.append('rect').attr('class', 'water').attr('x', L.interior.x).attr('y', L.interior.y).attr('width', L.interior.w).attr('height', L.interior.h).attr('rx', 5);
 
   // Clipped map layer
   const mapWrap = svgSel.append('g').attr('clip-path', 'url(#mapClip)');
   const gArea = mapWrap.append('g').attr('transform', `translate(${L.map.x},${L.map.y})`);
-  gArea.append('rect').attr('class', 'zoom-catch').attr('width', L.map.w).attr('height', L.map.h).attr('fill', 'transparent');
+  gArea.append('rect').attr('class', 'zoom-catch')
+    .attr('x', L.interior.x - L.map.x).attr('y', L.interior.y - L.map.y)
+    .attr('width', L.interior.w).attr('height', L.interior.h).attr('fill', 'transparent');
   const gGeo = gArea.append('g').attr('class', 'geo');
   const overlay = gArea.append('g').attr('class', 'overlay');
 
@@ -1061,13 +1184,6 @@ function composeChart(svgSel, opts) {
   drawFrame(svgSel, L);
   drawCompassRose(svgSel.append('g'), L.compass.cx, L.compass.cy, L.compass.r, Math.max(8, L.compass.r*0.34));
   drawLegend(svgSel, L);
-
-  const wmF = Math.max(7, Math.min(W, H)/95);
-  if (shape === 'circle') {
-    svgSel.append('text').attr('class', 'watermark').attr('x', L.cx).attr('y', L.cy + L.R + L.ring*0.5 + wmF + 2).attr('text-anchor', 'middle').attr('font-size', wmF).text('Royal Caribbean Cruise Route Mapper');
-  } else {
-    svgSel.append('text').attr('class', 'watermark').attr('x', W - L.m - 8).attr('y', H - L.m - 8).attr('text-anchor', 'end').attr('font-size', wmF).text('Royal Caribbean Cruise Route Mapper');
-  }
 
   if (interactive) {
     zoomBehavior = d3.zoom().scaleExtent([1, 40]).extent([[0,0],[L.map.w, L.map.h]])
