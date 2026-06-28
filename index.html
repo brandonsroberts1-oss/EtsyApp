@@ -1565,6 +1565,65 @@ function drawGeography(g, projection, path) {
   g.append('path').datum(topojson.mesh(worldData, worldData.objects.countries, (a,b) => a !== b)).attr('class', 'borders').attr('d', path);
 }
 
+// ── Geometry cropping for the circle export ──────────────────────────────────
+// Laser software ignores SVG clip-paths, so for the porthole we physically clip
+// the geography path data to the circle (rect crops are handled by clipExtent).
+function parseSubpaths(d) {
+  return d.split('M').filter(s => s.trim()).map(s =>
+    s.replace(/Z/ig, '').split('L').map(pr => pr.split(',').map(Number)).filter(p => p.length === 2 && !isNaN(p[0]) && !isNaN(p[1])));
+}
+function sutherlandHodgman(subject, clip) {
+  // clip = convex polygon; "inside" = same side as the clip's centroid.
+  const cen = clip.reduce((a,p) => [a[0]+p[0]/clip.length, a[1]+p[1]/clip.length], [0,0]);
+  let out = subject;
+  for (let c = 0; c < clip.length && out.length; c++) {
+    const A = clip[c], B = clip[(c+1)%clip.length];
+    const side = p => (B[0]-A[0])*(p[1]-A[1]) - (B[1]-A[1])*(p[0]-A[0]);
+    const ref = Math.sign(side(cen)) || 1;
+    const inside = p => Math.sign(side(p)) === ref || side(p) === 0;
+    const inp = out; out = [];
+    for (let k = 0; k < inp.length; k++) {
+      const P = inp[k], Q = inp[(k+1)%inp.length], Pin = inside(P), Qin = inside(Q);
+      if (Pin) out.push(P);
+      if (Pin !== Qin) {
+        const sp = side(P), sq = side(Q), t = sp/(sp-sq);
+        out.push([P[0]+t*(Q[0]-P[0]), P[1]+t*(Q[1]-P[1])]);
+      }
+    }
+  }
+  return out;
+}
+function clipSegmentToCircle(P, Q, cx, cy, r) {
+  // returns the [t0,t1] sub-segment of P->Q inside the circle, or null
+  const dx = Q[0]-P[0], dy = Q[1]-P[1];
+  const fx = P[0]-cx, fy = P[1]-cy;
+  const a = dx*dx+dy*dy, b = 2*(fx*dx+fy*dy), c = fx*fx+fy*fy-r*r;
+  if (a < 1e-9) return (c <= 0) ? [P, Q] : null;
+  const disc = b*b-4*a*c; if (disc < 0) return null;
+  const sd = Math.sqrt(disc);
+  let t0 = Math.max(0, (-b-sd)/(2*a)), t1 = Math.min(1, (-b+sd)/(2*a));
+  if (t0 >= t1) return null;
+  return [[P[0]+t0*dx, P[1]+t0*dy], [P[0]+t1*dx, P[1]+t1*dy]];
+}
+function clipPathToCircle(d, cx, cy, r, closed) {
+  const N = 96, ng = [];
+  for (let i = 0; i < N; i++) { const a = i/N*2*Math.PI; ng.push([cx+Math.cos(a)*r, cy+Math.sin(a)*r]); }
+  const fmt = p => `${p[0].toFixed(1)},${p[1].toFixed(1)}`;
+  let out = '';
+  for (const sub of parseSubpaths(d)) {
+    if (closed) {
+      const cl = sutherlandHodgman(sub, ng);
+      if (cl.length >= 3) out += 'M' + cl.map(fmt).join('L') + 'Z';
+    } else {
+      for (let k = 0; k < sub.length-1; k++) {
+        const seg = clipSegmentToCircle(sub[k], sub[k+1], cx, cy, r);
+        if (seg) out += 'M' + fmt(seg[0]) + 'L' + fmt(seg[1]);
+      }
+    }
+  }
+  return out;
+}
+
 function buildRouteAndMarkers(overlay, projection, itin, L) {
   const all = itin.waypoints;
   const ports = dedupe(all.filter(w => w.type !== 'sea'));
@@ -1654,7 +1713,7 @@ function computeLayout(W, H, shape) {
 
 // Build the full chart into svgSel. Returns the layout. Wires zoom if interactive.
 function composeChart(svgSel, opts) {
-  const { W, H, shape, itin, startDate, endDate, fitMode, interactive } = opts;
+  const { W, H, shape, itin, startDate, endDate, fitMode, interactive, cropToView } = opts;
   svgSel.attr('viewBox', `0 0 ${W} ${H}`).attr('preserveAspectRatio', 'xMidYMid meet').attr('xmlns', 'http://www.w3.org/2000/svg');
   svgSel.selectAll('*').remove();
   const L = computeLayout(W, H, shape);
@@ -1684,8 +1743,21 @@ function composeChart(svgSel, opts) {
   const overlay = gArea.append('g').attr('class', 'overlay');
 
   const projection = makeProjection(itin.waypoints, { w: L.map.w, h: L.map.h }, fitMode, itin.region);
+  // For exports, physically crop the geography to the visible area so the file
+  // contains only the local map (laser software ignores SVG clip-paths). The
+  // projection clipExtent does a true rectangular crop of the path data.
+  if (cropToView) {
+    const ix = L.interior.x - L.map.x, iy = L.interior.y - L.map.y;
+    projection.clipExtent([[ix, iy], [ix + L.interior.w, iy + L.interior.h]]);
+  }
   const path = d3.geoPath().projection(projection);
   drawGeography(gGeo, projection, path);
+  // The circle needs a true circular crop, not a rectangle.
+  if (cropToView && shape === 'circle') {
+    const ccx = L.cx - L.map.x, ccy = L.cy - L.map.y, cr = L.R - 2;
+    gGeo.selectAll('.land, .borders').each(function () { const s = d3.select(this); s.attr('d', clipPathToCircle(s.attr('d') || '', ccx, ccy, cr, true)); });
+    gGeo.select('.graticule').each(function () { const s = d3.select(this); s.attr('d', clipPathToCircle(s.attr('d') || '', ccx, ccy, cr, false)); });
+  }
   const rm = buildRouteAndMarkers(overlay, projection, itin, L);
   rm.positionRoute(d3.zoomIdentity);
   rm.positionMarkers(d3.zoomIdentity);
@@ -1768,25 +1840,26 @@ function styleAndSerialize(node) {
 }
 
 // "Wide" export: the current on-screen chart, preserving the live zoom/pan.
-function exportCurrentView() {
-  return document.getElementById('cruise-map').cloneNode(true);
-}
-
-// Sized exports: a fresh, self-contained chart fit to the chosen frame so the
-// whole route sits perfectly inside the 3.5" square or 3.8" circle.
-function buildSizedExport(shape) {
+// All exports are built fresh and have their geography geometry physically
+// cropped to the visible area (cropToView), so the file only contains the local
+// cruise-route map — never the whole world — for laser/engraving software that
+// ignores SVG clip-paths.
+function buildExport(shape) {
   const itin = ITINERARIES[itinSelect.value];
   if (!itin) return null;
-  const dims = shape === 'square' ? { W: 700, H: 700, win: '3.5in', hin: '3.5in' }
-                                   : { W: 760, H: 760, win: '3.8in', hin: '3.8in' };
-  const svg = d3.create('svg').attr('width', dims.win).attr('height', dims.hin);
-  composeChart(svg, { W: dims.W, H: dims.H, shape, itin, startDate: dateStart.value, endDate: dateEnd.value, fitMode: 'route', interactive: false });
+  let W, H, win, hin, sh, fit;
+  if (shape === 'square')      { W = H = 700; win = hin = '3.5in'; sh = 'square'; fit = 'route'; }
+  else if (shape === 'circle') { W = H = 760; win = hin = '3.8in'; sh = 'circle'; fit = 'route'; }
+  else { const c = svgEl.parentElement; W = c.clientWidth || 960; H = c.clientHeight || 640; sh = 'rect'; fit = 'region'; }
+  const svg = d3.create('svg');
+  if (win) svg.attr('width', win).attr('height', hin);
+  composeChart(svg, { W, H, shape: sh, itin, startDate: dateStart.value, endDate: dateEnd.value, fitMode: fit, interactive: false, cropToView: true });
   return svg.node();
 }
 
 exportBtn.addEventListener('click', () => {
   const shape = exportFormat.value;
-  const node = (shape === 'wide') ? exportCurrentView() : buildSizedExport(shape);
+  const node = buildExport(shape);
   if (!node) return;
   const str = styleAndSerialize(node);
   const blob = new Blob([str], { type: 'image/svg+xml;charset=utf-8' });
