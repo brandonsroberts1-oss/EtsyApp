@@ -1432,18 +1432,9 @@ function drawCompassRose(parent, cx, cy, r, lf) {
 
 // Stylized brass plaque holding the itinerary name + dates.
 function drawBanner(parent, cx, top, maxW, itin, start, end, L) {
-  // Size the plaque to the text: estimate each line's width, shrink the font
-  // only if it would exceed maxW, then make the box just wide enough to fit.
-  let titleF = L.bannerTitleF, dateF = L.bannerDateF;
-  const dates = (start && end) ? `${formatDate(start)}  –  ${formatDate(end)}` : `${itin.nights} Nights`;
-  const padX = 22;
-  const avail = Math.max(120, maxW - padX*2);
-  let tW = itin.name.length * titleF * 0.62;   // Cinzel caps + letter-spacing
-  let dW = dates.length * dateF * 0.5;          // Spectral italic
-  if (tW > avail) { titleF *= avail / tW; tW = avail; }
-  if (dW > avail) { dateF  *= avail / dW; dW = avail; }
-  const w = Math.min(maxW, Math.max(tW, dW) + padX*2);
-  const h = L.bannerH, x = cx - w/2, g = parent.append('g');
+  // Size the plaque to its text (see bannerBox).
+  const bb = bannerBox(L, itin, start, end);
+  const titleF = bb.titleF, dateF = bb.dateF, dates = bb.dates, w = bb.w, h = bb.h, x = bb.x, g = parent.append('g');
   g.append('rect').attr('x', x).attr('y', top).attr('width', w).attr('height', h).attr('rx', 5)
     .attr('fill', 'rgba(8,22,33,0.88)').attr('stroke', '#b98d3e').attr('stroke-width', 1.6);
   g.append('rect').attr('x', x+3).attr('y', top+3).attr('width', w-6).attr('height', h-6).attr('rx', 3)
@@ -1559,10 +1550,12 @@ function makeProjection(waypoints, area, fitMode, region) {
   return d3.geoMercator().fitSize([area.w, area.h], mp);
 }
 
-function drawGeography(g, projection, path) {
-  g.append('path').datum(d3.geoGraticule().step([10,10])()).attr('class', 'graticule').attr('d', path);
+function drawGeography(g, projection, path, laser) {
+  // For laser exports keep only the land fill (graticule + coastline strokes
+  // create stray engrave marks), so the design stays clean.
+  if (!laser) g.append('path').datum(d3.geoGraticule().step([10,10])()).attr('class', 'graticule').attr('d', path);
   g.append('path').datum(topojson.feature(worldData, worldData.objects.countries)).attr('class', 'land').attr('d', path);
-  g.append('path').datum(topojson.mesh(worldData, worldData.objects.countries, (a,b) => a !== b)).attr('class', 'borders').attr('d', path);
+  if (!laser) g.append('path').datum(topojson.mesh(worldData, worldData.objects.countries, (a,b) => a !== b)).attr('class', 'borders').attr('d', path);
 }
 
 // ── Geometry cropping for the circle export ──────────────────────────────────
@@ -1624,16 +1617,112 @@ function clipPathToCircle(d, cx, cy, r, closed) {
   return out;
 }
 
-function buildRouteAndMarkers(overlay, projection, itin, L) {
+// ── Laser-export helpers ─────────────────────────────────────────────────────
+function polysToPath(polys) {
+  return polys.map(p => 'M' + p.map(q => `${q[0].toFixed(1)},${q[1].toFixed(1)}`).join('L') + 'Z').join('');
+}
+// Subtract an axis-aligned rectangle from a set of polygons (returns up to four
+// rectangular slices per polygon = the polygon minus the rect). Used to clear a
+// map-free buffer around the wheel / banner / legend / compass so they engrave
+// visibly instead of on top of the map.
+function subtractRect(polys, b, bounds) {
+  const out = [];
+  for (const poly of polys) {
+    let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
+    for (const p of poly) { x0=Math.min(x0,p[0]); y0=Math.min(y0,p[1]); x1=Math.max(x1,p[0]); y1=Math.max(y1,p[1]); }
+    if (x1<=b.x0 || x0>=b.x1 || y1<=b.y0 || y0>=b.y1) { out.push(poly); continue; } // no overlap
+    const pieces = [
+      [bounds.x0, bounds.y0, b.x0, bounds.y1],   // left of rect
+      [b.x1, bounds.y0, bounds.x1, bounds.y1],   // right of rect
+      [b.x0, bounds.y0, b.x1, b.y0],             // above rect (within its x-span)
+      [b.x0, b.y1, b.x1, bounds.y1],             // below rect
+    ];
+    for (const [ax,ay,bx,by] of pieces) {
+      if (ax>=bx || ay>=by) continue;
+      const cl = sutherlandHodgman(poly, [[ax,ay],[bx,ay],[bx,by],[ax,by]]);
+      if (cl.length >= 3) out.push(cl);
+    }
+  }
+  return out;
+}
+function subtractRects(d, rects) {
+  let polys = parseSubpaths(d).filter(p => p.length >= 3);
+  let bx0=1e9,by0=1e9,bx1=-1e9,by1=-1e9;
+  for (const p of polys) for (const q of p) { bx0=Math.min(bx0,q[0]); by0=Math.min(by0,q[1]); bx1=Math.max(bx1,q[0]); by1=Math.max(by1,q[1]); }
+  const bounds = { x0:bx0-2, y0:by0-2, x1:bx1+2, y1:by1+2 };
+  for (const r of rects) polys = subtractRect(polys, r, bounds);
+  return polysToPath(polys);
+}
+// Convert a route path into discrete dash segments (real geometry) because
+// laser software ignores stroke-dasharray and renders it as a solid line.
+function routeToDashes(d, dash, gap, rects) {
+  const ns = 'http://www.w3.org/2000/svg';
+  const tmp = document.createElementNS(ns, 'svg');
+  tmp.setAttribute('style', 'position:absolute;width:0;height:0;visibility:hidden');
+  const pth = document.createElementNS(ns, 'path'); pth.setAttribute('d', d);
+  tmp.appendChild(pth); document.body.appendChild(tmp);
+  const total = pth.getTotalLength();
+  const segs = [];
+  for (let pos = 0; pos < total; pos += dash + gap) {
+    const a = pth.getPointAtLength(pos), b = pth.getPointAtLength(Math.min(pos + dash, total));
+    const mx = (a.x+b.x)/2, my = (a.y+b.y)/2;
+    if (rects.some(r => mx>=r.x0 && mx<=r.x1 && my>=r.y0 && my<=r.y1)) continue;
+    segs.push(`M${a.x.toFixed(1)},${a.y.toFixed(1)}L${b.x.toFixed(1)},${b.y.toFixed(1)}`);
+  }
+  document.body.removeChild(tmp);
+  return segs;
+}
+// Banner box size (shared by drawBanner and the buffer calc).
+function bannerBox(L, itin, start, end) {
+  let titleF = L.bannerTitleF, dateF = L.bannerDateF;
+  const dates = (start && end) ? `${formatDate(start)}  –  ${formatDate(end)}` : `${itin.nights} Nights`;
+  const padX = 22, avail = Math.max(120, L.bannerMaxW - padX*2);
+  let tW = itin.name.length * titleF * 0.62, dW = dates.length * dateF * 0.5;
+  if (tW > avail) { titleF *= avail/tW; tW = avail; }
+  if (dW > avail) { dateF *= avail/dW; dW = avail; }
+  const w = Math.min(L.bannerMaxW, Math.max(tW, dW) + padX*2);
+  return { x: L.cx - w/2, y: L.bannerTop, w, h: L.bannerH, titleF, dateF, dates };
+}
+// Remap the whole theme to a laser-friendly grayscale (light ground, dark ink).
+const LASER_COLORS = {
+  '#06141f':'#ffffff', '#0b2436':'#ffffff', '#050e18':'#ffffff',
+  'rgba(8,22,33,0.88)':'#ffffff', 'rgba(6,18,28,0.86)':'#ffffff', 'rgba(6,18,28,0.82)':'#ffffff', 'rgba(7,16,32,0.88)':'#ffffff',
+  '#27412f':'#d2d2d2', '#3a6048':'#9a9a9a',
+  '#e8c96b':'#000000', '#d4ae50':'#000000', '#c8a84b':'#000000', '#b98d3e':'#000000', '#6e5526':'#000000',
+  '#f0d27a':'#000000', '#d8b85a':'#000000', '#f0d68a':'#000000', '#f3ead0':'#000000', '#d6c290':'#000000',
+  '#ede6d2':'#000000', '#cdbf9e':'#000000',
+  '#8a6d2a':'#555555', '#a8801f':'#333333', '#2a2110':'#000000',
+  '#c14b39':'#1a1a1a', '#8f3024':'#000000',
+  '#5aa0e0':'#444444', '#a8d4ff':'#666666',
+  'rgba(150,190,170,0.07)':'#eeeeee', 'rgba(0,0,0,0.45)':'#cccccc',
+};
+function toLaserColors(str) {
+  for (const [from, to] of Object.entries(LASER_COLORS)) str = str.split(from).join(to);
+  return str;
+}
+
+function buildRouteAndMarkers(overlay, projection, itin, L, opts) {
+  const laser = !!(opts && opts.laser), buffers = (opts && opts.buffers) || [];
   const all = itin.waypoints;
   const ports = dedupe(all.filter(w => w.type !== 'sea'));
   const lineGen = d3.line().x(d => d[0]).y(d => d[1]).curve(d3.curveCatmullRom.alpha(0.5));
-  const dash = `${(L.routeW*3.4).toFixed(1)} ${(L.routeW*2.6).toFixed(1)}`;
-  const rShadow = overlay.append('path').attr('class', 'route-shadow').attr('stroke-width', L.routeW*1.8).attr('stroke-dasharray', dash);
-  const rLine = overlay.append('path').attr('class', 'route').attr('stroke-width', L.routeW).attr('stroke-dasharray', dash).attr('filter', 'url(#glow)');
-  function positionRoute(t) {
-    const pts = all.map(w => t.apply(projection([w.lon, w.lat])));
-    const d = lineGen(pts); rShadow.attr('d', d); rLine.attr('d', d);
+  let positionRoute;
+  if (laser) {
+    // Real dash geometry (laser ignores stroke-dasharray), with dashes inside
+    // the chrome buffers omitted so the route never crosses those zones.
+    const d = lineGen(all.map(w => projection([w.lon, w.lat])));
+    const dg = overlay.append('g').attr('class', 'route-dashes');
+    for (const seg of routeToDashes(d, L.routeW*3.4, L.routeW*2.6, buffers))
+      dg.append('path').attr('class', 'route').attr('d', seg).attr('stroke-width', L.routeW).attr('stroke-linecap', 'round');
+    positionRoute = () => {};
+  } else {
+    const dash = `${(L.routeW*3.4).toFixed(1)} ${(L.routeW*2.6).toFixed(1)}`;
+    const rShadow = overlay.append('path').attr('class', 'route-shadow').attr('stroke-width', L.routeW*1.8).attr('stroke-dasharray', dash);
+    const rLine = overlay.append('path').attr('class', 'route').attr('stroke-width', L.routeW).attr('stroke-dasharray', dash).attr('filter', 'url(#glow)');
+    positionRoute = function (t) {
+      const pts = all.map(w => t.apply(projection([w.lon, w.lat])));
+      const d = lineGen(pts); rShadow.attr('d', d); rLine.attr('d', d);
+    };
   }
   // Choose a label side per port; flip neighbours whose (wide) labels would
   // overlap to the opposite side (e.g. Miami/CocoCay, St Thomas/St Maarten).
@@ -1713,7 +1802,7 @@ function computeLayout(W, H, shape) {
 
 // Build the full chart into svgSel. Returns the layout. Wires zoom if interactive.
 function composeChart(svgSel, opts) {
-  const { W, H, shape, itin, startDate, endDate, fitMode, interactive, cropToView } = opts;
+  const { W, H, shape, itin, startDate, endDate, fitMode, interactive, cropToView, laser } = opts;
   svgSel.attr('viewBox', `0 0 ${W} ${H}`).attr('preserveAspectRatio', 'xMidYMid meet').attr('xmlns', 'http://www.w3.org/2000/svg');
   svgSel.selectAll('*').remove();
   const L = computeLayout(W, H, shape);
@@ -1744,30 +1833,67 @@ function composeChart(svgSel, opts) {
 
   const projection = makeProjection(itin.waypoints, { w: L.map.w, h: L.map.h }, fitMode, itin.region);
   // For exports, physically crop the geography to the visible area so the file
-  // contains only the local map (laser software ignores SVG clip-paths). The
-  // projection clipExtent does a true rectangular crop of the path data.
+  // contains only the local map (laser software ignores SVG clip-paths).
   if (cropToView) {
     const ix = L.interior.x - L.map.x, iy = L.interior.y - L.map.y;
     projection.clipExtent([[ix, iy], [ix + L.interior.w, iy + L.interior.h]]);
   }
   const path = d3.geoPath().projection(projection);
-  drawGeography(gGeo, projection, path);
-  // The circle needs a true circular crop, not a rectangle.
+
+  // Decide compass + legend placement up front (rect/square) so we know where to
+  // clear map-free buffers for the laser export.
+  if (shape !== 'circle') {
+    const ports = dedupe(itin.waypoints.filter(w => w.type !== 'sea'));
+    const pp = ports.map(w => { const q = projection([w.lon, w.lat]); return [L.map.x + q[0], L.map.y + q[1]]; });
+    const minD = (cx, cy) => pp.length ? Math.min(...pp.map(p => Math.hypot(p[0]-cx, p[1]-cy))) : 1e9;
+    const ci = L.compass.r + 12;
+    const bl = [L.map.x + ci, L.map.y + L.map.h - ci], br = [L.map.x + L.map.w - ci, L.map.y + L.map.h - ci];
+    const compassBR = minD(br[0], br[1]) >= minD(bl[0], bl[1]);
+    L.compass.cx = (compassBR ? br : bl)[0];
+    L.compass.cy = (compassBR ? br : bl)[1];
+    const cands = ['TL', 'TR', compassBR ? 'BL' : 'BR'];
+    const probe = { TL:[L.map.x+50, L.map.y+45], TR:[L.map.x+L.map.w-50, L.map.y+45],
+                    BL:[L.map.x+50, L.map.y+L.map.h-45], BR:[L.map.x+L.map.w-50, L.map.y+L.map.h-45] };
+    let best = cands[0], bestD = -1;
+    for (const c of cands) { const d = minD(probe[c][0], probe[c][1]); if (d > bestD) { bestD = d; best = c; } }
+    L.legendCorner = best;
+  }
+
+  // Buffer rectangles (map-free zones) around the chrome, in map-local coords.
+  const bb = bannerBox(L, itin, startDate, endDate);
+  const buffers = [];
+  if (laser) {
+    const pad = 7, toLocal = r => ({ x0: r.x0 - L.map.x, y0: r.y0 - L.map.y, x1: r.x1 - L.map.x, y1: r.y1 - L.map.y });
+    const emHalf = Math.max(L.handleR, bb.w/2, itin.ship.length * L.shipF * 0.31) + pad;
+    buffers.push(toLocal({ x0: L.cx - emHalf, y0: L.wheelCY - L.handleR - pad, x1: L.cx + emHalf, y1: bb.y + bb.h + pad }));
+    const ch = L.compass.r + Math.max(8, L.compass.r*0.34) + pad;
+    buffers.push(toLocal({ x0: L.compass.cx - ch, y0: L.compass.cy - ch, x1: L.compass.cx + ch, y1: L.compass.cy + ch }));
+    if (L.showLegend) {
+      const lw = 122, lh = 80;
+      const lx = (L.legendCorner[1] === 'R') ? (L.map.x + L.map.w - lw - 10) : (L.map.x + 10);
+      const ly = (L.legendCorner[0] === 'T') ? (L.map.y + 8) : (L.map.y + L.map.h - lh - 6);
+      buffers.push(toLocal({ x0: lx - pad, y0: ly - pad, x1: lx + lw + pad, y1: ly + lh + pad }));
+    }
+  }
+
+  drawGeography(gGeo, projection, path, laser);
   if (cropToView && shape === 'circle') {
     const ccx = L.cx - L.map.x, ccy = L.cy - L.map.y, cr = L.R - 2;
     gGeo.selectAll('.land, .borders').each(function () { const s = d3.select(this); s.attr('d', clipPathToCircle(s.attr('d') || '', ccx, ccy, cr, true)); });
     gGeo.select('.graticule').each(function () { const s = d3.select(this); s.attr('d', clipPathToCircle(s.attr('d') || '', ccx, ccy, cr, false)); });
   }
-  const rm = buildRouteAndMarkers(overlay, projection, itin, L);
+  if (laser && buffers.length) {
+    gGeo.select('.land').each(function () { const s = d3.select(this); s.attr('d', subtractRects(s.attr('d') || '', buffers)); });
+  }
+
+  const rm = buildRouteAndMarkers(overlay, projection, itin, L, { laser, buffers });
   rm.positionRoute(d3.zoomIdentity);
   rm.positionMarkers(d3.zoomIdentity);
 
-  // Header chrome: captain's wheel, ship name, itinerary banner (above the map,
-  // so they never overlap the route).
+  // Header chrome: captain's wheel, ship name, itinerary banner.
   const head = svgSel.append('g').attr('class', 'header');
   drawShipsWheel(head, L.cx, L.wheelCY, L.wheelR);
   head.append('text').attr('class', 'ship-name').attr('x', L.cx).attr('y', L.shipY).attr('font-size', L.shipF).text(itin.ship);
-  // Decorative divider with a center compass-star between the ship name and banner.
   const dvy = L.shipY + (L.bannerTop - L.shipY) * 0.5;
   const dvw = Math.min(L.bannerMaxW * 0.55, 150);
   head.append('line').attr('x1', L.cx - dvw/2).attr('y1', dvy).attr('x2', L.cx - 9).attr('y2', dvy).attr('stroke', '#b98d3e').attr('stroke-width', 1);
@@ -1776,27 +1902,6 @@ function composeChart(svgSel, opts) {
   drawBanner(head, L.cx, L.bannerTop, L.bannerMaxW, itin, startDate, endDate, L);
 
   drawFrame(svgSel, L);
-  // Place the compass and legend in the emptiest corners (rect/square) so the
-  // larger compass and the legend don't sit on top of ports / labels.
-  if (shape !== 'circle') {
-    const ports = dedupe(itin.waypoints.filter(w => w.type !== 'sea'));
-    const pp = ports.map(w => { const q = projection([w.lon, w.lat]); return [L.map.x + q[0], L.map.y + q[1]]; });
-    const minD = (cx, cy) => pp.length ? Math.min(...pp.map(p => Math.hypot(p[0]-cx, p[1]-cy))) : 1e9;
-    const r = L.compass.r, ci = r + 12;
-    const bl = [L.map.x + ci, L.map.y + L.map.h - ci], br = [L.map.x + L.map.w - ci, L.map.y + L.map.h - ci];
-    // Compass: the bottom corner farther from any port.
-    const compassBR = minD(br[0], br[1]) >= minD(bl[0], bl[1]);
-    L.compass.cx = (compassBR ? br : bl)[0];
-    L.compass.cy = (compassBR ? br : bl)[1];
-    // Legend: the remaining corner (the other bottom, or a top corner) farthest
-    // from ports — it has an opaque backing so sitting over land is fine.
-    const cands = ['TL', 'TR', compassBR ? 'BL' : 'BR'];
-    const probe = { TL:[L.map.x+50, L.map.y+45], TR:[L.map.x+L.map.w-50, L.map.y+45],
-                    BL:[L.map.x+50, L.map.y+L.map.h-45], BR:[L.map.x+L.map.w-50, L.map.y+L.map.h-45] };
-    let best = cands[0], bestD = -1;
-    for (const c of cands) { const d = minD(probe[c][0], probe[c][1]); if (d > bestD) { bestD = d; best = c; } }
-    L.legendCorner = best;
-  }
   drawCompassRose(svgSel.append('g'), L.compass.cx, L.compass.cy, L.compass.r, Math.max(8, L.compass.r*0.34));
   drawLegend(svgSel, L);
 
@@ -1827,7 +1932,7 @@ document.getElementById('zoom-reset').addEventListener('click', () => { if (zoom
 //  EXPORT
 // ════════════════════════════════════════════════════════════════════════════
 
-function styleAndSerialize(node) {
+function styleAndSerialize(node, laser) {
   // Ensure exactly one <style> source inside <defs> (never a duplicate attribute).
   node.querySelectorAll('style').forEach(s => s.remove());
   node.removeAttribute('style');
@@ -1836,7 +1941,9 @@ function styleAndSerialize(node) {
   let defs = node.querySelector('defs');
   if (!defs) { defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs'); node.insertBefore(defs, node.firstChild); }
   defs.appendChild(styleEl);
-  return '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(node);
+  let str = '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(node);
+  if (laser) str = toLaserColors(str);   // remap the theme to laser-friendly grayscale
+  return str;
 }
 
 // "Wide" export: the current on-screen chart, preserving the live zoom/pan.
@@ -1853,7 +1960,7 @@ function buildExport(shape) {
   else { const c = svgEl.parentElement; W = c.clientWidth || 960; H = c.clientHeight || 640; sh = 'rect'; fit = 'region'; }
   const svg = d3.create('svg');
   if (win) svg.attr('width', win).attr('height', hin);
-  composeChart(svg, { W, H, shape: sh, itin, startDate: dateStart.value, endDate: dateEnd.value, fitMode: fit, interactive: false, cropToView: true });
+  composeChart(svg, { W, H, shape: sh, itin, startDate: dateStart.value, endDate: dateEnd.value, fitMode: fit, interactive: false, cropToView: true, laser: true });
   return svg.node();
 }
 
@@ -1861,7 +1968,7 @@ exportBtn.addEventListener('click', () => {
   const shape = exportFormat.value;
   const node = buildExport(shape);
   if (!node) return;
-  const str = styleAndSerialize(node);
+  const str = styleAndSerialize(node, true);
   const blob = new Blob([str], { type: 'image/svg+xml;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
