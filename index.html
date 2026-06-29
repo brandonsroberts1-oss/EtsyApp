@@ -1645,17 +1645,61 @@ function subtractRect(polys, b, bounds) {
   }
   return out;
 }
-function subtractRects(d, rects) {
+// Clip a polygon to one half-plane of line A→B (keep side>=0 if keepPos).
+function clipHP(poly, A, B, keepPos) {
+  const out = [], n = poly.length; if (!n) return out;
+  const side = p => (B[0]-A[0])*(p[1]-A[1]) - (B[1]-A[1])*(p[0]-A[0]);
+  const inside = p => keepPos ? side(p) >= 0 : side(p) <= 0;
+  for (let i = 0; i < n; i++) {
+    const P = poly[i], Q = poly[(i+1)%n], Pi = inside(P), Qi = inside(Q);
+    if (Pi) out.push(P);
+    if (Pi !== Qi) { const sp = side(P), sq = side(Q), t = sp/(sp-sq); out.push([P[0]+t*(Q[0]-P[0]), P[1]+t*(Q[1]-P[1])]); }
+  }
+  return out;
+}
+// Polygon minus a convex polygon, decomposed into disjoint pieces.
+function subtractConvex(poly, clip, center) {
+  const out = []; let acc = poly;
+  for (let i = 0; i < clip.length && acc.length >= 3; i++) {
+    const A = clip[i], B = clip[(i+1)%clip.length];
+    const sc = (B[0]-A[0])*(center[1]-A[1]) - (B[1]-A[1])*(center[0]-A[0]);
+    const insidePos = sc >= 0;
+    const piece = clipHP(acc, A, B, !insidePos);   // outside this edge
+    if (piece.length >= 3) out.push(piece);
+    acc = clipHP(acc, A, B, insidePos);            // remainder still inside
+  }
+  return out;
+}
+// Subtract a circle (so the buffer follows the round contour of the wheel /
+// compass). Only the part within the circle's bbox is re-tessellated, so large
+// land polygons aren't shattered into slivers.
+function subtractCircle(polys, cx, cy, r) {
+  const N = 32, ng = []; for (let i = 0; i < N; i++) { const a = i/N*2*Math.PI; ng.push([cx+Math.cos(a)*r, cy+Math.sin(a)*r]); }
+  const b = { x0:cx-r, y0:cy-r, x1:cx+r, y1:cy+r }, out = [];
+  for (const poly of polys) {
+    let X0=1e9,Y0=1e9,X1=-1e9,Y1=-1e9; for (const p of poly) { X0=Math.min(X0,p[0]); Y0=Math.min(Y0,p[1]); X1=Math.max(X1,p[0]); Y1=Math.max(Y1,p[1]); }
+    if (X1<=b.x0 || X0>=b.x1 || Y1<=b.y0 || Y0>=b.y1) { out.push(poly); continue; }
+    for (const pc of subtractRect([poly], b, { x0:X0-1, y0:Y0-1, x1:X1+1, y1:Y1+1 })) out.push(pc); // outside bbox
+    const local = sutherlandHodgman(poly, [[b.x0,b.y0],[b.x1,b.y0],[b.x1,b.y1],[b.x0,b.y1]]);
+    if (local.length >= 3) for (const pc of subtractConvex(local, ng, [cx,cy])) if (pc.length >= 3) out.push(pc);
+  }
+  return out;
+}
+const inShape = (x, y, s) => s.type === 'circle' ? Math.hypot(x-s.cx, y-s.cy) <= s.r : (x>=s.x0 && x<=s.x1 && y>=s.y0 && y<=s.y1);
+// Subtract a list of contour shapes (rects + circles) from a land path.
+function subtractShapes(d, shapes) {
   let polys = parseSubpaths(d).filter(p => p.length >= 3);
-  let bx0=1e9,by0=1e9,bx1=-1e9,by1=-1e9;
-  for (const p of polys) for (const q of p) { bx0=Math.min(bx0,q[0]); by0=Math.min(by0,q[1]); bx1=Math.max(bx1,q[0]); by1=Math.max(by1,q[1]); }
-  const bounds = { x0:bx0-2, y0:by0-2, x1:bx1+2, y1:by1+2 };
-  for (const r of rects) polys = subtractRect(polys, r, bounds);
+  for (const s of shapes) {
+    if (s.type === 'circle') { polys = subtractCircle(polys, s.cx, s.cy, s.r); continue; }
+    let bx0=1e9,by0=1e9,bx1=-1e9,by1=-1e9;
+    for (const p of polys) for (const q of p) { bx0=Math.min(bx0,q[0]); by0=Math.min(by0,q[1]); bx1=Math.max(bx1,q[0]); by1=Math.max(by1,q[1]); }
+    polys = subtractRect(polys, s, { x0:bx0-2, y0:by0-2, x1:bx1+2, y1:by1+2 });
+  }
   return polysToPath(polys);
 }
 // Convert a route path into discrete dash segments (real geometry) because
 // laser software ignores stroke-dasharray and renders it as a solid line.
-function routeToDashes(d, dash, gap, rects) {
+function routeToDashes(d, dash, gap, shapes) {
   const ns = 'http://www.w3.org/2000/svg';
   const tmp = document.createElementNS(ns, 'svg');
   tmp.setAttribute('style', 'position:absolute;width:0;height:0;visibility:hidden');
@@ -1666,7 +1710,7 @@ function routeToDashes(d, dash, gap, rects) {
   for (let pos = 0; pos < total; pos += dash + gap) {
     const a = pth.getPointAtLength(pos), b = pth.getPointAtLength(Math.min(pos + dash, total));
     const mx = (a.x+b.x)/2, my = (a.y+b.y)/2;
-    if (rects.some(r => mx>=r.x0 && mx<=r.x1 && my>=r.y0 && my<=r.y1)) continue;
+    if (shapes.some(s => inShape(mx, my, s))) continue;
     segs.push(`M${a.x.toFixed(1)},${a.y.toFixed(1)}L${b.x.toFixed(1)},${b.y.toFixed(1)}`);
   }
   document.body.removeChild(tmp);
@@ -1859,20 +1903,28 @@ function composeChart(svgSel, opts) {
     L.legendCorner = best;
   }
 
-  // Buffer rectangles (map-free zones) around the chrome, in map-local coords.
+  // Small buffer shapes that hug each chrome element's contour (circle for the
+  // wheel & compass, tight rect for the ship name, banner and legend), in
+  // map-local coords. The land + route are cleared just inside these so the
+  // graphics stay legible without a big square of empty space.
   const bb = bannerBox(L, itin, startDate, endDate);
+  const dvy = L.shipY + (L.bannerTop - L.shipY) * 0.5;
   const buffers = [];
   if (laser) {
-    const pad = 7, toLocal = r => ({ x0: r.x0 - L.map.x, y0: r.y0 - L.map.y, x1: r.x1 - L.map.x, y1: r.y1 - L.map.y });
-    const emHalf = Math.max(L.handleR, bb.w/2, itin.ship.length * L.shipF * 0.31) + pad;
-    buffers.push(toLocal({ x0: L.cx - emHalf, y0: L.wheelCY - L.handleR - pad, x1: L.cx + emHalf, y1: bb.y + bb.h + pad }));
+    const pad = 4, lx = -L.map.x, ly = -L.map.y;
+    const rect = (x0,y0,x1,y1) => ({ type:'rect', x0:x0+lx, y0:y0+ly, x1:x1+lx, y1:y1+ly });
+    const circ = (cx,cy,r) => ({ type:'circle', cx:cx+lx, cy:cy+ly, r });
+    buffers.push(circ(L.cx, L.wheelCY, L.handleR + pad));                                   // captain's wheel
+    const shipW = itin.ship.length * L.shipF * 0.6;
+    buffers.push(rect(L.cx - shipW/2 - pad, L.shipY - L.shipF*0.95 - pad, L.cx + shipW/2 + pad, dvy + pad)); // ship name + divider
+    buffers.push(rect(bb.x - pad, bb.y - pad, bb.x + bb.w + pad, bb.y + bb.h + pad));        // banner
     const ch = L.compass.r + Math.max(8, L.compass.r*0.34) + pad;
-    buffers.push(toLocal({ x0: L.compass.cx - ch, y0: L.compass.cy - ch, x1: L.compass.cx + ch, y1: L.compass.cy + ch }));
+    buffers.push(circ(L.compass.cx, L.compass.cy, ch));                                      // compass
     if (L.showLegend) {
       const lw = 122, lh = 80;
-      const lx = (L.legendCorner[1] === 'R') ? (L.map.x + L.map.w - lw - 10) : (L.map.x + 10);
-      const ly = (L.legendCorner[0] === 'T') ? (L.map.y + 8) : (L.map.y + L.map.h - lh - 6);
-      buffers.push(toLocal({ x0: lx - pad, y0: ly - pad, x1: lx + lw + pad, y1: ly + lh + pad }));
+      const lgx = (L.legendCorner[1] === 'R') ? (L.map.x + L.map.w - lw - 10) : (L.map.x + 10);
+      const lgy = (L.legendCorner[0] === 'T') ? (L.map.y + 8) : (L.map.y + L.map.h - lh - 6);
+      buffers.push(rect(lgx - pad, lgy - pad, lgx + lw + pad, lgy + lh + pad));              // legend
     }
   }
 
@@ -1883,7 +1935,7 @@ function composeChart(svgSel, opts) {
     gGeo.select('.graticule').each(function () { const s = d3.select(this); s.attr('d', clipPathToCircle(s.attr('d') || '', ccx, ccy, cr, false)); });
   }
   if (laser && buffers.length) {
-    gGeo.select('.land').each(function () { const s = d3.select(this); s.attr('d', subtractRects(s.attr('d') || '', buffers)); });
+    gGeo.select('.land').each(function () { const s = d3.select(this); s.attr('d', subtractShapes(s.attr('d') || '', buffers)); });
   }
 
   const rm = buildRouteAndMarkers(overlay, projection, itin, L, { laser, buffers });
@@ -1894,7 +1946,6 @@ function composeChart(svgSel, opts) {
   const head = svgSel.append('g').attr('class', 'header');
   drawShipsWheel(head, L.cx, L.wheelCY, L.wheelR);
   head.append('text').attr('class', 'ship-name').attr('x', L.cx).attr('y', L.shipY).attr('font-size', L.shipF).text(itin.ship);
-  const dvy = L.shipY + (L.bannerTop - L.shipY) * 0.5;
   const dvw = Math.min(L.bannerMaxW * 0.55, 150);
   head.append('line').attr('x1', L.cx - dvw/2).attr('y1', dvy).attr('x2', L.cx - 9).attr('y2', dvy).attr('stroke', '#b98d3e').attr('stroke-width', 1);
   head.append('line').attr('x1', L.cx + 9).attr('y1', dvy).attr('x2', L.cx + dvw/2).attr('y2', dvy).attr('stroke', '#b98d3e').attr('stroke-width', 1);
