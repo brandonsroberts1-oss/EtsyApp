@@ -1716,6 +1716,19 @@ function routeToDashes(d, dash, gap, shapes) {
   document.body.removeChild(tmp);
   return segs;
 }
+// Accurate rendered text width (used to size the ship-name buffer exactly).
+function measureText(text, fontFamily, fontSize, letterSpacingPx) {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('style', 'position:absolute;width:0;height:0;visibility:hidden');
+  const t = document.createElementNS(ns, 'text');
+  t.setAttribute('font-family', fontFamily); t.setAttribute('font-size', fontSize);
+  if (letterSpacingPx) t.setAttribute('letter-spacing', letterSpacingPx + 'px');
+  t.textContent = text; svg.appendChild(t); document.body.appendChild(svg);
+  let w = 0; try { w = t.getComputedTextLength(); } catch (e) {}
+  document.body.removeChild(svg);
+  return w;
+}
 // Banner box size (shared by drawBanner and the buffer calc).
 function bannerBox(L, itin, start, end) {
   let titleF = L.bannerTitleF, dateF = L.bannerDateF;
@@ -1914,12 +1927,25 @@ function composeChart(svgSel, opts) {
     const pad = 4, lx = -L.map.x, ly = -L.map.y;
     const rect = (x0,y0,x1,y1) => ({ type:'rect', x0:x0+lx, y0:y0+ly, x1:x1+lx, y1:y1+ly });
     const circ = (cx,cy,r) => ({ type:'circle', cx:cx+lx, cy:cy+ly, r });
-    buffers.push(circ(L.cx, L.wheelCY, L.handleR + pad));                                   // captain's wheel
-    const shipW = itin.ship.length * L.shipF * 0.6;
-    buffers.push(rect(L.cx - shipW/2 - pad, L.shipY - L.shipF*0.95 - pad, L.cx + shipW/2 + pad, dvy + pad)); // ship name + divider
-    buffers.push(rect(bb.x - pad, bb.y - pad, bb.x + bb.w + pad, bb.y + bb.h + pad));        // banner
-    const ch = L.compass.r + Math.max(8, L.compass.r*0.34) + pad;
-    buffers.push(circ(L.compass.cx, L.compass.cy, ch));                                      // compass
+
+    // Captain's wheel — contour the rim plus a bump at each of the 8 handle knobs
+    // (so the buffer follows the wheel's shape, not a big plain circle).
+    const wr = L.wheelR;
+    buffers.push(circ(L.cx, L.wheelCY, wr*1.20 + 1));
+    for (let i = 0; i < 8; i++) { const a = i/8*2*Math.PI; buffers.push(circ(L.cx + Math.cos(a)*wr*1.32, L.wheelCY + Math.sin(a)*wr*1.32, wr*0.12 + pad)); }
+
+    // Ship name — buffer sized to the actually-rendered text width so it never clips.
+    const sw = (measureText(itin.ship, "'Cinzel', serif", L.shipF, 0.06*L.shipF) || itin.ship.length*L.shipF*0.72) + pad*2;
+    buffers.push(rect(L.cx - sw/2 - pad, L.shipY - L.shipF*0.92 - pad, L.cx + sw/2 + pad, dvy + pad));
+
+    // Banner plaque
+    buffers.push(rect(bb.x - pad, bb.y - pad, bb.x + bb.w + pad, bb.y + bb.h + pad));
+
+    // Compass — contour the rose plus a bump at each cardinal letter (N/E/S/W).
+    const lf = Math.max(8, L.compass.r*0.34), lr = L.compass.r + lf*0.78;
+    buffers.push(circ(L.compass.cx, L.compass.cy, L.compass.r + pad));
+    [[0,-1],[1,0],[0,1],[-1,0]].forEach(([dx,dy]) => buffers.push(circ(L.compass.cx + dx*lr, L.compass.cy + dy*lr, lf*0.85)));
+
     if (L.showLegend) {
       const lw = 122, lh = 80;
       const lgx = (L.legendCorner[1] === 'R') ? (L.map.x + L.map.w - lw - 10) : (L.map.x + 10);
