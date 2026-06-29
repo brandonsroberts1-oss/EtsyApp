@@ -1934,13 +1934,21 @@ function composeChart(svgSel, opts) {
     gGeo.selectAll('.land, .borders').each(function () { const s = d3.select(this); s.attr('d', clipPathToCircle(s.attr('d') || '', ccx, ccy, cr, true)); });
     gGeo.select('.graticule').each(function () { const s = d3.select(this); s.attr('d', clipPathToCircle(s.attr('d') || '', ccx, ccy, cr, false)); });
   }
-  if (laser && buffers.length) {
-    gGeo.select('.land').each(function () { const s = d3.select(this); s.attr('d', subtractShapes(s.attr('d') || '', buffers)); });
-  }
-
   const rm = buildRouteAndMarkers(overlay, projection, itin, L, { laser, buffers });
   rm.positionRoute(d3.zoomIdentity);
   rm.positionMarkers(d3.zoomIdentity);
+
+  // Laser exports: lay clean opaque "ground" shapes (rounded rects for the boxes,
+  // circles for the wheel/compass) over the map so each element has a smooth,
+  // contour-hugging buffer — no boolean slivers, no hard square notches. On a
+  // grayscale (image) engrave these areas read as background (un-engraved).
+  if (laser && buffers.length) {
+    const cov = gArea.append('g').attr('class', 'buffer-cover');
+    for (const s of buffers) {
+      if (s.type === 'circle') cov.append('circle').attr('cx', s.cx).attr('cy', s.cy).attr('r', s.r).attr('fill', '#ffffff');
+      else cov.append('rect').attr('x', s.x0).attr('y', s.y0).attr('width', s.x1-s.x0).attr('height', s.y1-s.y0).attr('rx', 8).attr('fill', '#ffffff');
+    }
+  }
 
   // Header chrome: captain's wheel, ship name, itinerary banner.
   const head = svgSel.append('g').attr('class', 'header');
