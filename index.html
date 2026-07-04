@@ -108,6 +108,15 @@
       gap: 8px;
     }
 
+    .cport-row { display: flex; gap: 6px; margin-bottom: 6px; align-items: center; }
+    .cport-row input { flex: 1; }
+    .cport-row .cport-del {
+      width: 28px; height: 30px; flex: none; border: 1px solid var(--border);
+      background: #071020; color: var(--gray); border-radius: 3px; cursor: pointer; font-size: 0.9rem;
+    }
+    .cport-row .cport-del:hover { color: #e06a5a; border-color: #e06a5a; }
+    .cport-row .cport-ok { width: 12px; flex: none; font-size: 0.7rem; }
+
     .btn {
       width: 100%;
       padding: 10px;
@@ -258,10 +267,42 @@
       <div class="section-title">Select Your Cruise</div>
 
       <div class="form-group">
+        <button class="btn btn-secondary" id="custom-toggle" type="button" style="margin-bottom:10px;">&#9998; Custom Cruise: Off</button>
+      </div>
+
+      <div class="form-group" id="itin-select-group">
         <label for="itin-select">Itinerary <span id="itin-count" style="color:var(--gray);font-size:0.7rem;"></span></label>
         <select id="itin-select">
           <option value="">-- Choose an itinerary --</option>
         </select>
+      </div>
+
+      <div id="custom-panel" style="display:none;">
+        <div class="form-group">
+          <label for="custom-ship">Ship Name</label>
+          <input type="text" id="custom-ship" placeholder="e.g. Wonder of the Seas" />
+        </div>
+        <div class="form-group">
+          <label for="custom-name">Itinerary Name</label>
+          <input type="text" id="custom-name" placeholder="e.g. Anniversary Cruise" />
+        </div>
+        <div class="form-group date-row">
+          <div>
+            <label for="custom-nights">Nights</label>
+            <input type="number" id="custom-nights" min="1" max="30" value="7" />
+          </div>
+          <div>
+            <label for="custom-home">Home Port</label>
+            <input type="text" id="custom-home" list="port-list" placeholder="Start typing a port…" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Ports of Call <span style="color:var(--gray);font-size:0.7rem;">(routes auto-draw as you type)</span></label>
+          <div id="custom-ports"></div>
+          <button class="btn btn-secondary" id="add-port-btn" type="button" style="margin-top:6px;padding:6px 10px;font-size:0.78rem;">+ Add Port</button>
+        </div>
+        <div id="custom-status" style="font-size:0.72rem;color:var(--gray);min-height:1em;margin-bottom:6px;"></div>
+        <datalist id="port-list"></datalist>
       </div>
 
       <div class="form-group date-row">
@@ -3480,16 +3521,20 @@ itinSelect.addEventListener('change', () => {
 
 // ─── Date sync ─────────────────────────────────────────────────────────────────
 dateStart.addEventListener('change', () => {
-  const key = itinSelect.value;
-  if (!key || !dateStart.value) return;
-  const itin = ITINERARIES[key];
+  if (!dateStart.value) return;
+  let nights = null;
+  if (customMode) nights = Math.min(30, Math.max(1, parseInt(document.getElementById('custom-nights').value, 10) || 7));
+  else if (itinSelect.value) nights = ITINERARIES[itinSelect.value].nights;
+  if (nights == null) return;
   const d = new Date(dateStart.value + 'T00:00:00');
-  d.setDate(d.getDate() + itin.nights);
+  d.setDate(d.getDate() + nights);
   dateEnd.value = d.toISOString().split('T')[0];
+  if (customMode) scheduleCustom();
 });
 
 // ─── Generate (on-screen, interactive) ──────────────────────────────────────────
 generateBtn.addEventListener('click', async () => {
+  if (customMode) { await renderCustom(); return; }
   const key = itinSelect.value;
   if (!key) { alert('Please select an itinerary.'); return; }
   if (!worldData) { generateBtn.textContent = 'Loading…'; await loadWorld(); }
@@ -3501,6 +3546,264 @@ generateBtn.addEventListener('click', async () => {
   placeholder.style.display = 'none';
   zoomControls.style.display = 'flex';
   zoomHint.style.display = 'block';
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+//  CUSTOM CRUISE MODE — type any ship/itinerary/ports; routes auto-draw.
+// ════════════════════════════════════════════════════════════════════════════
+
+let customMode = false;
+const customToggle = document.getElementById('custom-toggle');
+const customPanel  = document.getElementById('custom-panel');
+const itinGroup    = document.getElementById('itin-select-group');
+const customShip   = document.getElementById('custom-ship');
+const customName   = document.getElementById('custom-name');
+const customNights = document.getElementById('custom-nights');
+const customHome   = document.getElementById('custom-home');
+const portsBox     = document.getElementById('custom-ports');
+const addPortBtn   = document.getElementById('add-port-btn');
+const customStatus = document.getElementById('custom-status');
+
+// Extra well-known cruise ports beyond those already in ITINERARIES.
+const EXTRA_PORTS = {
+  'Key West, FL':[24.556,-81.796], 'Grand Turk, Turks & Caicos':[21.43,-71.14],
+  'Amber Cove (Puerto Plata), Dominican Republic':[19.83,-70.72], 'Labadee, Haiti':[19.79,-72.24],
+  'Falmouth, Jamaica':[18.49,-77.66], 'Ocho Rios, Jamaica':[18.41,-77.10], 'Montego Bay, Jamaica':[18.47,-77.92],
+  "St. Croix (Frederiksted), USVI":[17.71,-64.88], 'Tortola (Road Town), BVI':[18.42,-64.62],
+  'Punta Cana, Dominican Republic':[18.55,-68.37], 'La Romana, Dominican Republic':[18.42,-68.97],
+  "St. George's, Grenada":[12.05,-61.75], 'Kingstown, St. Vincent':[13.16,-61.22],
+  'Roseau, Dominica':[15.30,-61.39], 'Pointe-à-Pitre, Guadeloupe':[16.22,-61.53],
+  'Fort-de-France, Martinique':[14.60,-61.07], 'Bridgetown, Barbados':[13.097,-59.614],
+  'Boston, MA':[42.35,-70.95], 'Bar Harbor, ME':[44.39,-68.20], 'Portland, ME':[43.66,-70.24],
+  'Halifax, Nova Scotia':[44.64,-63.55], 'Saint John, New Brunswick':[45.26,-66.05], 'Quebec City, QC':[46.82,-71.19],
+  'Charleston, SC':[32.78,-79.90], 'Bimini, Bahamas':[25.73,-79.28], 'Freeport, Bahamas':[26.52,-78.65],
+  'San Diego, CA':[32.71,-117.17], 'San Francisco, CA':[37.81,-122.41], 'Astoria, OR':[46.19,-123.83],
+  'Kodiak, AK':[57.79,-152.40], 'Lisbon, Portugal':[38.70,-9.15], 'Porto (Leixões), Portugal':[41.19,-8.70],
+  'Vigo, Spain':[42.24,-8.72], 'Bilbao, Spain':[43.35,-3.03], 'Le Havre (Paris), France':[49.48,0.12],
+  'Zeebrugge (Bruges), Belgium':[51.35,3.20], 'Amsterdam, Netherlands':[52.42,4.80], 'Rotterdam, Netherlands':[51.95,4.05],
+  'Hamburg, Germany':[53.55,9.93], 'Kiel, Germany':[54.32,10.13], 'Oslo, Norway':[59.90,10.72],
+  'Geiranger, Norway':[62.10,7.20], 'Flåm, Norway':[60.86,7.11], 'Reykjavik, Iceland':[64.15,-21.95],
+  'Cádiz (Seville), Spain':[36.53,-6.29], 'Málaga, Spain':[36.71,-4.42], 'Gibraltar':[36.14,-5.36],
+  'Alicante, Spain':[38.34,-0.48], 'Valencia, Spain':[39.44,-0.31], 'Ibiza, Spain':[38.91,1.44],
+  'Ajaccio, Corsica':[41.92,8.74], 'Cagliari, Sardinia':[39.21,9.11], 'Venice (Ravenna), Italy':[44.49,12.28],
+  'Zadar, Croatia':[44.12,15.22], 'Katakolon (Olympia), Greece':[37.65,21.32], 'Chania (Souda), Crete':[35.49,24.07],
+  'Kusadasi (Ephesus), Turkey':[37.86,27.26], 'Istanbul, Turkey':[41.02,28.98], 'Limassol, Cyprus':[34.65,33.01],
+  'Haifa, Israel':[32.82,35.00], 'Alexandria, Egypt':[31.21,29.89],
+  'Dubai, UAE':[25.27,55.28], 'Abu Dhabi, UAE':[24.52,54.38], 'Doha, Qatar':[25.30,51.53], 'Muscat, Oman':[23.62,58.57],
+  'Hong Kong':[22.29,114.16], 'Tokyo (Yokohama), Japan':[35.45,139.66], 'Osaka, Japan':[34.65,135.43],
+  'Busan, South Korea':[35.10,129.04], 'Ho Chi Minh City (Phu My), Vietnam':[10.58,107.03],
+  'Bangkok (Laem Chabang), Thailand':[13.08,100.89], 'Bali (Benoa), Indonesia':[-8.74,115.21],
+  'Auckland, New Zealand':[-36.84,174.77], 'Papeete, Tahiti':[-17.54,-149.57],
+  'Cartagena, Colombia':[10.40,-75.53], 'Colón, Panama':[9.36,-79.90],
+  'Puntarenas, Costa Rica':[9.98,-84.83], 'Puerto Limón, Costa Rica':[10.00,-83.02],
+  'Valparaíso, Chile':[-33.03,-71.62], 'Buenos Aires, Argentina':[-34.58,-58.37], 'Rio de Janeiro, Brazil':[-22.89,-43.17],
+};
+
+// Port database: every named stop in ITINERARIES plus the extras above.
+const PORT_DB = {};
+for (const it of Object.values(ITINERARIES))
+  for (const w of it.waypoints)
+    if (w.type !== 'sea' && !PORT_DB[w.name]) PORT_DB[w.name] = [w.lat, w.lon];
+for (const [n, c] of Object.entries(EXTRA_PORTS)) if (!PORT_DB[n]) PORT_DB[n] = c;
+(function fillDatalist(){
+  const dl = document.getElementById('port-list');
+  for (const n of Object.keys(PORT_DB).sort()) {
+    const o = document.createElement('option'); o.value = n; dl.appendChild(o);
+  }
+})();
+
+// Resolve a typed name: local database first (exact → prefix → substring),
+// then online geocoding (OpenStreetMap Nominatim) as a fallback.
+const GEO_CACHE = {};
+async function resolvePort(raw) {
+  const q = raw.trim().toLowerCase();
+  if (!q) return null;
+  const keys = Object.keys(PORT_DB);
+  let k = keys.find(n => n.toLowerCase() === q)
+       || keys.find(n => n.toLowerCase().startsWith(q))
+       || keys.find(n => n.toLowerCase().includes(q));
+  if (k) return { name: k, lat: PORT_DB[k][0], lon: PORT_DB[k][1] };
+  if (GEO_CACHE[q]) return GEO_CACHE[q];
+  try {
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&accept-language=en&q=${encodeURIComponent(raw.trim())}`);
+    if (res.ok) {
+      const js = await res.json();
+      if (js && js[0]) {
+        const p = { name: raw.trim(), lat: +js[0].lat, lon: +js[0].lon };
+        GEO_CACHE[q] = p; PORT_DB[p.name] = [p.lat, p.lon];
+        return p;
+      }
+    }
+  } catch (e) { /* offline — fall through */ }
+  return null;
+}
+
+// ── Water routing: keep each leg off land by inserting detour sea points. ──
+let LFEATS = null;
+function landFeaturesList() {
+  if (!LFEATS && worldData)
+    LFEATS = topojson.feature(worldData, worldData.objects.countries).features.map(f => ({ f, b: d3.geoBounds(f) }));
+  return LFEATS;
+}
+function ptIsLand(lon, lat) {
+  const F = landFeaturesList(); if (!F) return false;
+  for (const { f, b } of F)
+    if (lon >= b[0][0] && lon <= b[1][0] && lat >= b[0][1] && lat <= b[1][1] && d3.geoContains(f, [lon, lat])) return true;
+  return false;
+}
+function segClear(a, b, skip = 0.2) {
+  const N = 40;
+  for (let j = 1; j < N; j++) {
+    const t = j / N, lo = a.lon + (b.lon - a.lon) * t, la = a.lat + (b.lat - a.lat) * t;
+    if (Math.hypot(lo - a.lon, la - a.lat) < skip || Math.hypot(lo - b.lon, la - b.lat) < skip) continue;
+    if (ptIsLand(lo, la)) return false;
+  }
+  return true;
+}
+function landCount(a, b) {
+  const N = 40; let c = 0;
+  for (let j = 1; j < N; j++) {
+    const t = j / N;
+    if (ptIsLand(a.lon + (b.lon - a.lon) * t, a.lat + (b.lat - a.lat) * t)) c++;
+  }
+  return c;
+}
+// Direction-independent, deterministic detour: the same pair of ports always
+// yields the same waypoint whichever way it is sailed (no bow-tie crossings).
+function seaDetour(a, b, depth) {
+  if (depth <= 0 || segClear(a, b)) return [];
+  const mx = (a.lon + b.lon) / 2, my = (a.lat + b.lat) / 2;
+  let dx = b.lon - a.lon, dy = b.lat - a.lat;
+  const len = Math.hypot(dx, dy) || 1; dx /= len; dy /= len;
+  const px = -dy, py = dx, offs = [0.3, 0.6, 1.0, 1.5, 2.2, 3.0, 4.0, 5.2];
+  const ok = [];
+  for (const d of offs) for (const s of [1, -1]) {
+    const m = { lon: mx + px * d * s, lat: my + py * d * s };
+    if (ptIsLand(m.lon, m.lat)) continue;
+    if (segClear(a, m) && segClear(m, b)) ok.push({ m, d });
+  }
+  if (ok.length) { ok.sort((A, B) => A.d - B.d || A.m.lon - B.m.lon || A.m.lat - B.m.lat); return [ok[0].m]; }
+  let best = null, bs = Infinity;
+  for (const d of offs) for (const s of [1, -1]) {
+    const m = { lon: mx + px * d * s, lat: my + py * d * s };
+    if (ptIsLand(m.lon, m.lat)) continue;
+    const sc = landCount(a, m) + landCount(m, b) + d * 0.01;
+    if (sc < bs) { bs = sc; best = m; }
+  }
+  if (best) return [...seaDetour(a, best, depth - 1), best, ...seaDetour(best, b, depth - 1)];
+  return [];
+}
+function seaRoute(a, b) {
+  return seaDetour(a, b, 6).map(m => ({ name: 'At Sea', lat: +m.lat.toFixed(3), lon: +m.lon.toFixed(3), type: 'sea' }));
+}
+
+// ── Build an itinerary object from the typed fields. ──
+async function buildCustomItin() {
+  const homeName = customHome.value.trim();
+  const nights = Math.min(30, Math.max(1, parseInt(customNights.value, 10) || 7));
+  const names = [...portsBox.querySelectorAll('input')].map(i => i.value.trim()).filter(Boolean);
+  if (!homeName || !names.length) return null;
+  const home = await resolvePort(homeName);
+  if (!home) { customStatus.textContent = `Home port not found: “${homeName}”`; return null; }
+  const stops = [];
+  for (const n of names) {
+    const p = await resolvePort(n);
+    if (!p) { customStatus.textContent = `Port not found: “${n}” — keep typing or check spelling.`; return null; }
+    stops.push(p);
+  }
+  customStatus.textContent = '';
+  const seq = [
+    { name: home.name, lat: home.lat, lon: home.lon, type: 'home', day: 1 },
+    ...stops.map((p, i) => ({
+      name: p.name, lat: p.lat, lon: p.lon, type: 'port',
+      day: Math.min(nights, Math.max(2, Math.round(1 + (i + 1) / (stops.length + 1) * nights))),
+    })),
+    { name: home.name, lat: home.lat, lon: home.lon, type: 'home', day: nights + 1 },
+  ];
+  const wp = [];
+  for (let i = 0; i < seq.length; i++) {
+    wp.push(seq[i]);
+    if (i < seq.length - 1) wp.push(...seaRoute(seq[i], seq[i + 1]));
+  }
+  return {
+    line: 'Custom', name: customName.value.trim() || 'Custom Cruise', nights,
+    ship: customShip.value.trim() || 'My Ship', homePort: home.name, region: 'Custom', waypoints: wp,
+  };
+}
+
+function updateCustomPreview(it) {
+  const visible = it.waypoints.filter(w => w.type !== 'sea');
+  previewEl.innerHTML = `
+    <div class="itin-meta"><span>${it.ship}</span> &bull; ${it.nights} nights &bull; from ${it.homePort}</div>
+    <ul class="port-list">
+      ${visible.map(w => `<li><span class="pday">Day ${w.day}</span>
+        <div class="pdot pdot-${w.type === 'home' ? 'home' : 'port'}"></div><span>${w.name}</span></li>`).join('')}
+    </ul>`;
+}
+
+async function renderCustom() {
+  if (!worldData) { customStatus.textContent = 'Loading map data…'; await loadWorld(); customStatus.textContent = ''; }
+  const it = await buildCustomItin();
+  if (!it) return;
+  if (!dateStart.value) {
+    const d = new Date(); d.setDate(d.getDate() + 30);
+    dateStart.value = d.toISOString().split('T')[0];
+  }
+  const d = new Date(dateStart.value + 'T00:00:00');
+  d.setDate(d.getDate() + it.nights);
+  dateEnd.value = d.toISOString().split('T')[0];
+  renderScreen(it, dateStart.value, dateEnd.value);
+  updateCustomPreview(it);
+  exportBtn.disabled = false;
+  placeholder.style.display = 'none';
+  zoomControls.style.display = 'flex';
+  zoomHint.style.display = 'block';
+}
+
+// Live re-route as the user types (debounced).
+let customTimer = null;
+function scheduleCustom() {
+  if (!customMode) return;
+  clearTimeout(customTimer);
+  customTimer = setTimeout(renderCustom, 700);
+}
+
+function addPortRow(value = '') {
+  const row = document.createElement('div');
+  row.className = 'cport-row';
+  const inp = document.createElement('input');
+  inp.type = 'text'; inp.setAttribute('list', 'port-list');
+  inp.placeholder = 'Type a port city…'; inp.value = value;
+  inp.addEventListener('input', scheduleCustom);
+  inp.addEventListener('change', scheduleCustom);
+  const del = document.createElement('button');
+  del.type = 'button'; del.className = 'cport-del'; del.textContent = '✕'; del.title = 'Remove port';
+  del.addEventListener('click', () => { row.remove(); scheduleCustom(); });
+  row.appendChild(inp); row.appendChild(del);
+  portsBox.appendChild(row);
+  return inp;
+}
+addPortBtn.addEventListener('click', () => { addPortRow().focus(); });
+
+for (const el of [customShip, customName, customNights, customHome]) {
+  el.addEventListener('input', scheduleCustom);
+  el.addEventListener('change', scheduleCustom);
+}
+
+customToggle.addEventListener('click', () => {
+  customMode = !customMode;
+  customToggle.innerHTML = customMode ? '&#9998; Custom Cruise: On' : '&#9998; Custom Cruise: Off';
+  customToggle.classList.toggle('btn-primary', customMode);
+  customToggle.classList.toggle('btn-secondary', !customMode);
+  customPanel.style.display = customMode ? 'block' : 'none';
+  itinGroup.style.display = customMode ? 'none' : 'block';
+  if (customMode) {
+    if (!portsBox.children.length) { addPortRow(); addPortRow(); }
+    loadWorld();
+    previewEl.innerHTML = '<p style="color:var(--gray);font-size:0.78rem;font-family:Arial,sans-serif;">Fill in the custom cruise fields — the route draws automatically as you type ports.</p>';
+  } else {
+    customStatus.textContent = '';
+  }
 });
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -4131,7 +4434,9 @@ function composeChart(svgSel, opts) {
   return L;
 }
 
+let currentItin = null;
 function renderScreen(itin, startDate, endDate) {
+  currentItin = itin;
   const container = svgEl.parentElement;
   composeChart(d3.select('#cruise-map'), {
     W: container.clientWidth, H: container.clientHeight,
@@ -4168,7 +4473,7 @@ function styleAndSerialize(node, laser) {
 // cruise-route map — never the whole world — for laser/engraving software that
 // ignores SVG clip-paths.
 function buildExport(shape) {
-  const itin = ITINERARIES[itinSelect.value];
+  const itin = currentItin || ITINERARIES[itinSelect.value];
   if (!itin) return null;
   let W, H, win, hin, sh, fit;
   if (shape === 'square')      { W = H = 700; win = hin = '3.5in'; sh = 'square'; fit = 'route'; }
@@ -4189,7 +4494,7 @@ exportBtn.addEventListener('click', () => {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  const itin = ITINERARIES[itinSelect.value];
+  const itin = currentItin || ITINERARIES[itinSelect.value];
   const tag = shape === 'square' ? '3.5in_square' : shape === 'circle' ? '3.8in_circle' : 'wide';
   a.download = `RC_${itin.name.replace(/[^a-zA-Z0-9]+/g,'_')}_${itin.ship.replace(/[^a-zA-Z0-9]+/g,'_')}_${tag}.svg`;
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
